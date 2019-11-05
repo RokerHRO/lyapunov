@@ -1,4 +1,4 @@
-# lyapunov – a 2d/3D Lyapunov fractal generator
+# lyapunov – a 2D/3D Lyapunov fractal generator
 
 Thes programs are in this repo:
 ## lyapunov
