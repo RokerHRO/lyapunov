@@ -1,6 +1,7 @@
 # lyapunov – a 2D/3D Lyapunov fractal generator
+<img src="https://raw.githubusercontent.com/RokerHRO/lyapunov/master/seq-AB.png" width="250" height="250" align="right" />
 
-Thes programs are in this repo:
+These programs are in this repo:
 ## lyapunov
 ### Requirements
 (none, except a libc with getopt() support)
@@ -27,6 +28,8 @@ Usage: ./lyapunov [-W width] [-H height] [-z value] [-s sequence] [-i max_iter]
 	-Y max_y  : maximum y value (default: 2.400000)
 ```
 The files (PPM image for 2D fractals or Pov-Ray's 3df file format for 3D fractals) are written to stdout.
+
+<img src="https://raw.githubusercontent.com/RokerHRO/lyapunov/master/seq-ABAAAAB.png" width="250" height="250" align="right" />
 
 ## gen-ab-sequences
 Prints all non-repetitive AB sequences (that starts with A) to stdout. Sequences starting with B would produce the same images as the sequences with all A's and B's interchanged, except mirrored by the x=y axis.
