@@ -141,7 +141,7 @@ void make_ppm()
 	printf("P6\n");
 	fflush(stdout);
 	lyapunov(img, nmax, seq, cmin);
-	printf("# Lyapunov: max_iter=%d  seq='%s'  a=%f ... %f  b=%f ... %f  c=%f  "
+	printf("# Lyapunov: max_iter=%d  seq='%s'  a=%f ... %f  b=%f ... %f  c=%f  \n"
 		"%d %d\n255\n",
 		nmax, seq.c_str(), amin, amax, bmin, bmax, cmin,
 		bsize, asize
