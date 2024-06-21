@@ -142,7 +142,8 @@ void make_ppm()
 	fflush(stdout);
 	lyapunov(img, nmax, seq, cmin);
 	printf("# Lyapunov: max_iter=%d  seq='%s'  a=%f ... %f  b=%f ... %f  c=%f  "
-		"%d %d\n255\n",
+		"\n"
+		"%d %d 255\n",
 		nmax, seq.c_str(), amin, amax, bmin, bmax, cmin,
 		bsize, asize
 		);
