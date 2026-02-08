@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
+#include <cstdint>
 #include <cmath>
 #include <string>
 #include <unistd.h> // for getopt()
@@ -21,6 +22,15 @@ double amax = 2.4;
 double bmin = 2.4;
 double bmax = 3.999;
 
+double valueD = 3.7;
+double valueE = 3.0;
+double valueF = 3.0;
+
+bool setC = false;
+bool setD = false;
+bool setE = false;
+bool setF = false;
+
 int asize = 800;
 int bsize = 800;
 int csize = 0;  // value >0 lets create 3df file instead of PPM
@@ -30,6 +40,10 @@ int nmax = 1000;                /* number of rounds */
 /* for color generation; somewhat empirical, in order to match Wickerprint's original colors */
 double lambda_min = -2.55;
 double lambda_max = 0.3959;
+
+
+std::vector<std::vector<float>> prob; // probability for each img pixel
+
 
 struct RGB
 {
@@ -69,7 +83,7 @@ uint8_t lambda2pxl<uint8_t>(double lambda)
 
 // extension: 3rd dimension: value c is fixed, selected by 'C' in sequence string
 template<class PXL>
-void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::string& sequence, double c)
+void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::string& sequence, double c, double d, double e)
 {
 
   double min_x = +HUGE_VAL;
@@ -79,22 +93,28 @@ void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::strin
 
   const int height = img.size();
   const int width  = img[0].size();
+  
 
 #pragma omp parallel for schedule(dynamic)
   for (int ai = 0; ai <height; ++ai)
   {
-    const double a = amin + (amax-amin)/height*(ai+0.5);
+//    const double a = amin + (amax-amin)/height*(ai+0.5);
+    double vals[5] = {0.0, 0.0, c, d, e };
+    vals[0] = amin + (amax-amin)/height*(ai+0.5);
+    
     double sum_log_deriv, prod_deriv, x;
     fprintf(stderr, "\r%4d of %4d   ", ai, height);
     for (int bi = 0; bi < width; ++bi)
     {
-      const double b = bmin + (bmax-bmin)/width*(bi+0.5);
+//      const double b = bmin + (bmax-bmin)/width*(bi+0.5);
+      
+      vals[1] = bmin + (bmax-bmin)/width*(bi+0.5);
       x = 0.5;
       /* one round without derivating, so that the value 0.5 is avoided */
       for (unsigned m = 0; m < sequence.length(); m++)
       {
         const char ch = sequence[m];
-        const double r = ch=='B' ? b : (ch=='A' ? a : c);
+        const double r = vals[ch-'A']; //ch=='B' ? b : (ch=='A' ? a : c);
         x = r*x*(1-x);
       }
       sum_log_deriv = 0;
@@ -104,7 +124,7 @@ void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::strin
         for (unsigned m = 0; m < sequence.length(); m++)
         {
           const char ch = sequence[m];
-          const double r = ch=='B' ? b : (ch=='A' ? a : c);
+          const double r = vals[ch-'A']; // ch=='B' ? b : (ch=='A' ? a : c);
           /* avoid computing too many logarithms. One every round is acceptable. */
           prod_deriv *= r*(1-2*x); 
           x = r*x*(1-x);
@@ -130,6 +150,7 @@ void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::strin
 
 void make_ppm()
 {
+	// RGB image:
 	std::vector<std::vector<RGB>> img;
 	img.resize(asize);
 	for(auto& row : img)
@@ -137,14 +158,33 @@ void make_ppm()
 		row.resize(bsize);
 	}
 	
+	prob.resize(asize);
+	for(auto& row : prob)
+	{
+		row.resize(bsize);
+	}
+
+	
+	for(int y=0; y<asize; ++y)
+	for(int x=0; x<bsize; ++x)
+	{
+		const double b = (x-(bsize/2))
+	}
+	
+	
 	// PPM header
 	printf("P6\n");
 	fflush(stdout);
-	lyapunov(img, nmax, seq, cmin);
-	printf("# Lyapunov: max_iter=%d  seq='%s'  a=%f ... %f  b=%f ... %f  c=%f  "
-		"\n"
+	lyapunov(img, nmax, seq, cmin, valueD, valueE);
+	printf("# Lyapunov: max_iter=%d  seq='%s'  a=%f ... %f  b=%f ... %f  c=%f  ",
+		nmax, seq.c_str(), amin, amax, bmin, bmax, cmin );
+	
+	if(setD) printf(" D=%f", valueD);
+	if(setE) printf(" E=%f", valueE);
+	if(setF) printf(" F=%f", valueF);
+	
+	printf("\n"
 		"%d %d 255\n",
-		nmax, seq.c_str(), amin, amax, bmin, bmax, cmin,
 		bsize, asize
 		);
 	
@@ -154,6 +194,7 @@ void make_ppm()
 	}
 	fflush(stdout);
 }
+
 
 inline
 uint8_t get(const std::vector<std::vector<std::vector<uint8_t>>>& img, int x, int y, int z)
@@ -190,7 +231,7 @@ void make_3df()
 	{
 		const double c = cmin + (cmax-cmin)/(csize-1)*ci;
 		fprintf(stderr, "Frame %i of %i. c=%f \n", ci, csize, c);
-		lyapunov(img[2], nmax, seq, c);
+		lyapunov(img[2], nmax, seq, c, valueD, valueE);
 		
 		fprintf(stderr,"\tblurring...\n");
 		for(int y=0; y<asize; ++y)
@@ -216,7 +257,7 @@ void make_3df()
 int main(int argc, char** argv)
 {
 	int a;
-	while( (a=getopt(argc, argv, "W:H:F:z:Z:c:x:y:X:Y:s:i:")) != -1 )
+	while( (a=getopt(argc, argv, "W:H:F:z:Z:c:x:y:X:Y:s:i:C:D:E:")) != -1 )
 	{
 		switch(a)
 		{
@@ -231,7 +272,10 @@ int main(int argc, char** argv)
 			case 'X': bmax = atof(optarg);  break;
 			case 'Y': amax = atof(optarg);  break;
 			case 's': seq = optarg;         break;
-			case 'i': nmax = atoi(optarg);  break; 
+			case 'i': nmax = atoi(optarg);  break;
+			case 'C': cmin   = atof(optarg); setC = true; break;
+			case 'D': valueD = atof(optarg); setD = true; break;
+			case 'E': valueE = atof(optarg); setE = true; break;
 			case '?':
 				fprintf(stderr, 
 					"Generate a Lyapunov fractal as PPM or 3df to stdout.\n\n"
@@ -252,8 +296,11 @@ int main(int argc, char** argv)
 					"\t-X max_x  : maximum x value (default: %f)\n"
 					"\t-y min_y  : minimum y value (default: %f)\n"
 					"\t-Y max_y  : maximum y value (default: %f)\n"
+					"\t-C value  : value for 3th dimension (default %f)\n"
+					"\t-D value  : value for 4th dimension (default %f)\n"
+					"\t-E value  : value for 5th dimension (default %f)\n"
 					, argv[0], bsize, asize, cmin, seq.c_str(), nmax,
-					bmin, bmax, amin, amax
+					bmin, bmax, amin, amax, cmin, valueD, valueE
 					);
 					return 1;
 		}
@@ -275,8 +322,15 @@ int main(int argc, char** argv)
 		amin = cy + dy/2;
 		amax = cy - dy/2;
 		
-		fprintf(stderr, "Interval calculated from \"-c %s\": min_x=%11.9f  max_x=%11.9f  min_y=%11.9f  max_y=%11.9f\n",
+		fprintf(stderr, "Interval calculated from \"-c %s\": min_x=%11.9f  max_x=%11.9f  min_y=%11.9f  max_y=%11.9f",
 			center.c_str(), bmin, bmax, amin, amax);
+		
+		if(setC) fprintf(stderr, " C=%f", cmin);
+		if(setD) fprintf(stderr, " D=%f", valueD);
+		if(setE) fprintf(stderr, " E=%f", valueE);
+		if(setF) fprintf(stderr, " F=%f", valueF);
+		
+		fputc('\n', stderr);
 	}
 	
 	if(csize)
