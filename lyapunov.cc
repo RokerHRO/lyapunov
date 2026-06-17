@@ -163,14 +163,6 @@ void make_ppm()
 	{
 		row.resize(bsize);
 	}
-
-	
-	for(int y=0; y<asize; ++y)
-	for(int x=0; x<bsize; ++x)
-	{
-		const double b = (x-(bsize/2))
-	}
-	
 	
 	// PPM header
 	printf("P6\n");
