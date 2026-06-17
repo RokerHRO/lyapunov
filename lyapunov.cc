@@ -86,65 +86,65 @@ template<class PXL>
 void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::string& sequence, double c, double d, double e)
 {
 
-  double min_x = +HUGE_VAL;
-  double max_x = -HUGE_VAL;
-  double min_lambda = +HUGE_VAL;
-  double max_lambda = -HUGE_VAL;
+	double min_x = +HUGE_VAL;
+	double max_x = -HUGE_VAL;
+	double min_lambda = +HUGE_VAL;
+	double max_lambda = -HUGE_VAL;
 
-  const int height = img.size();
-  const int width  = img[0].size();
-  
+	const int height = img.size();
+	const int width  = img[0].size();
+	
 
 #pragma omp parallel for schedule(dynamic)
-  for (int ai = 0; ai <height; ++ai)
-  {
-//    const double a = amin + (amax-amin)/height*(ai+0.5);
-    double vals[5] = {0.0, 0.0, c, d, e };
-    vals[0] = amin + (amax-amin)/height*(ai+0.5);
-    
-    double sum_log_deriv, prod_deriv, x;
-    fprintf(stderr, "\r%4d of %4d   ", ai, height);
-    for (int bi = 0; bi < width; ++bi)
-    {
-//      const double b = bmin + (bmax-bmin)/width*(bi+0.5);
-      
-      vals[1] = bmin + (bmax-bmin)/width*(bi+0.5);
-      x = 0.5;
-      /* one round without derivating, so that the value 0.5 is avoided */
-      for (unsigned m = 0; m < sequence.length(); m++)
-      {
-        const char ch = sequence[m];
-        const double r = vals[ch-'A']; //ch=='B' ? b : (ch=='A' ? a : c);
-        x = r*x*(1-x);
-      }
-      sum_log_deriv = 0;
-      for (int n = 0; n < max_iter; n++)
-      {
-        prod_deriv = 1;
-        for (unsigned m = 0; m < sequence.length(); m++)
-        {
-          const char ch = sequence[m];
-          const double r = vals[ch-'A']; // ch=='B' ? b : (ch=='A' ? a : c);
-          /* avoid computing too many logarithms. One every round is acceptable. */
-          prod_deriv *= r*(1-2*x); 
-          x = r*x*(1-x);
-        }
-        sum_log_deriv += log(fabs(prod_deriv));
-      }
-      const double lambda = sum_log_deriv / (nmax*sequence.length());
-      
-      if(x>max_x) max_x = x;
-      if(x<min_x) min_x = x;
-      if(lambda>max_lambda) max_lambda = lambda;
-      if(lambda<min_lambda) min_lambda = lambda;
-      
-      img[ai][bi] = lambda2pxl<PXL>(lambda);
-    }
-  }
-  
-  fprintf(stderr, " x=%f ... %f ; lambda=%f ... %f \n",
-      min_x, max_x, min_lambda, max_lambda );
-  
+	for (int ai = 0; ai <height; ++ai)
+	{
+//		const double a = amin + (amax-amin)/height*(ai+0.5);
+		double vals[5] = {0.0, 0.0, c, d, e };
+		vals[0] = amin + (amax-amin)/height*(ai+0.5);
+		
+		double sum_log_deriv, prod_deriv, x;
+		fprintf(stderr, "\r%4d of %4d   ", ai, height);
+		for (int bi = 0; bi < width; ++bi)
+		{
+//			const double b = bmin + (bmax-bmin)/width*(bi+0.5);
+			
+			vals[1] = bmin + (bmax-bmin)/width*(bi+0.5);
+			x = 0.5;
+			/* one round without derivating, so that the value 0.5 is avoided */
+			for (unsigned m = 0; m < sequence.length(); m++)
+			{
+				const char ch = sequence[m];
+				const double r = vals[ch-'A']; //ch=='B' ? b : (ch=='A' ? a : c);
+				x = r*x*(1-x);
+			}
+			sum_log_deriv = 0;
+			for (int n = 0; n < max_iter; n++)
+			{
+				prod_deriv = 1;
+				for (unsigned m = 0; m < sequence.length(); m++)
+				{
+					const char ch = sequence[m];
+					const double r = vals[ch-'A']; // ch=='B' ? b : (ch=='A' ? a : c);
+					/* avoid computing too many logarithms. One every round is acceptable. */
+					prod_deriv *= r*(1-2*x); 
+					x = r*x*(1-x);
+				}
+				sum_log_deriv += log(fabs(prod_deriv));
+			}
+			const double lambda = sum_log_deriv / (nmax*sequence.length());
+			
+			if(x>max_x) max_x = x;
+			if(x<min_x) min_x = x;
+			if(lambda>max_lambda) max_lambda = lambda;
+			if(lambda<min_lambda) min_lambda = lambda;
+			
+			img[ai][bi] = lambda2pxl<PXL>(lambda);
+		}
+	}
+	
+	fprintf(stderr, " x=%f ... %f ; lambda=%f ... %f \n",
+			min_x, max_x, min_lambda, max_lambda );
+	
 }
 
 
