@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
@@ -6,6 +7,11 @@
 #include <unistd.h> // for getopt()
 #include <vector>
 
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#endif
+
 #define CLAMP(x) (((x) > 255) ? (unsigned char)255u : ((x) < 0) ? (unsigned char)0u : (unsigned char)(x))
 
 //int seq_length = 12;
@@ -13,6 +19,7 @@
 
 std::string center;
 std::string seq = "BBBABBAAAAAA";
+std::string outfile;
 
 double cmin = 2.5; // We go to 3rd dimension! \o/
 double cmax = 4.0; // for 3df files
@@ -248,14 +255,15 @@ void make_3df()
 
 int main(int argc, char** argv)
 {
+	const auto program_start = std::chrono::system_clock::now();
 	int a;
-	while( (a=getopt(argc, argv, "W:H:F:z:Z:c:x:y:X:Y:s:i:C:D:E:")) != -1 )
+	while( (a=getopt(argc, argv, "W:H:f:c:x:y:z:X:Y:Z:s:i:C:D:E:F:")) != -1 )
 	{
 		switch(a)
 		{
 			case 'W': bsize = atoi(optarg); break;
 			case 'H': asize = atoi(optarg); break;
-			case 'F': csize = atoi(optarg); break;
+			case 'f': csize = atoi(optarg); break;
 			case 'z': cmin  = atof(optarg); break;
 			case 'Z': cmax  = atof(optarg); break;
 			case 'c': center = optarg;      break;
@@ -268,11 +276,14 @@ int main(int argc, char** argv)
 			case 'C': cmin   = atof(optarg); setC = true; break;
 			case 'D': valueD = atof(optarg); setD = true; break;
 			case 'E': valueE = atof(optarg); setE = true; break;
-			case '?':
+			case 'F': valueF = atof(optarg); setF = true; break;
+			case '?': [[fallthrough]];
+			default:
 				fprintf(stderr, 
 					"Generate a Lyapunov fractal as PPM or 3df to stdout.\n\n"
-					"Usage: %s [-W width] [-H height] [-z value] [-s sequence] [-i max_iter]\n"
-					"   { [-c center_x:center_y:size] | [-x min_x] [-X max_x] [-y min_y] [-Y max_y] }\n"
+					"Usage: %s [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]\n"
+					"   { [-c center_x:center_y:size] | [-x min_x] [-X max_x] [-y min_y] [-Y max_y] } [-z min_z] [-Z max_z]\n"
+					"     [-C value] [-D value] [-E value] [-F value]\n"
 					"\n"
 					"\t-W width  : width of image in pixel (default: %i)\n"
 					"\t-H height : height of image in pixel (default: %i)\n"
@@ -291,14 +302,14 @@ int main(int argc, char** argv)
 					"\t-C value  : value for 3th dimension (default %f)\n"
 					"\t-D value  : value for 4th dimension (default %f)\n"
 					"\t-E value  : value for 5th dimension (default %f)\n"
-					, argv[0], bsize, asize, cmin, seq.c_str(), nmax,
-					bmin, bmax, amin, amax, cmin, valueD, valueE
+					, argv[0], bsize, asize, seq.c_str(), nmax,
+					bmin, bmax, amin, amax, cmin, cmin, valueD, valueE
 					);
 					return 1;
 		}
 	}
 	
-	if(center.size())
+	if(!center.empty())
 	{
 		double cx=0.0, cy=0.0, dx=0.0;
 		const int ret = sscanf(center.c_str(), "%lg:%lg:%lg", &cx, &cy, &dx);
@@ -324,7 +335,12 @@ int main(int argc, char** argv)
 		
 		fputc('\n', stderr);
 	}
-	
+
+#ifdef _WIN32
+	setmode(fileno(stdout),O_BINARY);
+	setmode(fileno(stdin),O_BINARY);
+#endif
+
 	if(csize)
 	{
 		make_3df();
@@ -333,5 +349,10 @@ int main(int argc, char** argv)
 	}
 	
 	fflush(stdout);
-	fprintf(stderr, "\n");
+	const auto program_end = std::chrono::system_clock::now();
+	const std::chrono::hh_mm_ss hms{ program_end - program_start};
+	std::stringstream ss;
+	ss << hms;
+
+	fprintf(stderr, "All done.\nTotal time: %s \n", ss.str().c_str());
 }
