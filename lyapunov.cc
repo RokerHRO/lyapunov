@@ -7,6 +7,8 @@
 #include <unistd.h> // for getopt()
 #include <vector>
 
+#include "fractal_type.hh"
+
 #ifdef _WIN32
 #include <io.h>
 #include <fcntl.h>
@@ -100,14 +102,20 @@ void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::strin
 
 	const int height = img.size();
 	const int width  = img[0].size();
-	
+	Dimension da{unsigned(height), amin, amax};
+	Dimension db{ unsigned(width), bmin, bmax};
+
+	double vals[5] = {0.0, 0.0, c, d, e };
+	SimpleFractalType ftype(da, db, c, d, e);
+	ftype.per_image(vals);
 
 #pragma omp parallel for schedule(dynamic)
 	for (int ai = 0; ai <height; ++ai)
 	{
 //		const double a = amin + (amax-amin)/height*(ai+0.5);
-		double vals[5] = {0.0, 0.0, c, d, e };
-		vals[0] = amin + (amax-amin)/height*(ai+0.5);
+
+//		vals[0] = amin + (amax-amin)/height*(ai+0.5);
+		ftype.per_line(vals, ai);
 		
 		double sum_log_deriv, prod_deriv, x;
 		fprintf(stderr, "\r%4d of %4d   ", ai, height);
@@ -115,7 +123,9 @@ void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::strin
 		{
 //			const double b = bmin + (bmax-bmin)/width*(bi+0.5);
 			
-			vals[1] = bmin + (bmax-bmin)/width*(bi+0.5);
+//			vals[1] = bmin + (bmax-bmin)/width*(bi+0.5);
+			ftype.per_pixel(vals, ai, bi);
+
 			x = 0.5;
 			/* one round without derivating, so that the value 0.5 is avoided */
 			for (unsigned m = 0; m < sequence.length(); m++)

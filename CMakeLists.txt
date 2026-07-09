@@ -18,8 +18,11 @@ if(WIN32 AND NOT MSVC)
     set(BUILD_SHARED_LIBS OFF)
 endif()
 
-add_executable(lyapunov lyapunov.cc)
+add_executable(lyapunov lyapunov.cc
+        fractal_type.cc)
+
 add_executable(gen-ab-sequences gen-ab-sequences.cc)
+
 add_executable(gen_zoom gen_zoom.cc)
 
 install(TARGETS lyapunov
