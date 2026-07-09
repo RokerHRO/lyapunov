@@ -19,7 +19,8 @@ if(WIN32 AND NOT MSVC)
 endif()
 
 add_executable(lyapunov lyapunov.cc
-        fractal_type.cc)
+        fractal_type.cc
+        string_case.hh)
 
 add_executable(gen-ab-sequences gen-ab-sequences.cc)
 

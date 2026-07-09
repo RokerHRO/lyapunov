@@ -6,8 +6,10 @@
 #include <string>
 #include <unistd.h> // for getopt()
 #include <vector>
+#include <omp.h>
 
 #include "fractal_type.hh"
+#include "string_case.hh"
 
 #ifdef _WIN32
 #include <io.h>
@@ -21,6 +23,8 @@
 
 std::string center;
 std::string seq = "BBBABBAAAAAA";
+std::string type = "plain";
+std::string format = "pnm";
 std::string outfile;
 
 double cmin = 2.5; // We go to 3rd dimension! \o/
@@ -45,6 +49,8 @@ int bsize = 800;
 int csize = 0;  // value >0 lets create 3df file instead of PPM
 
 int nmax = 1000;                /* number of rounds */
+
+FILE* of = nullptr;
 
 /* for color generation; somewhat empirical, in order to match Wickerprint's original colors */
 double lambda_min = -2.55;
@@ -105,15 +111,24 @@ void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::strin
 	Dimension da{unsigned(height), amin, amax};
 	Dimension db{ unsigned(width), bmin, bmax};
 
-	double vals[5] = {0.0, 0.0, c, d, e };
+	constexpr unsigned THREADS = 32;
+	double tvals[THREADS][5] = { {0.0, 0.0, c, d, e } };
+	for (unsigned t=0; t<THREADS; ++t)
+	{
+		tvals[t][2] = c;
+		tvals[t][3] = d;
+		tvals[t][4] = e;
+	}
+
 	SimpleFractalType ftype(da, db, c, d, e);
-	ftype.per_image(vals);
+//	ftype.per_image(vals);
 
 #pragma omp parallel for schedule(dynamic)
 	for (int ai = 0; ai <height; ++ai)
 	{
+		const int tn = omp_get_thread_num();
+		double* vals = tvals[tn];
 //		const double a = amin + (amax-amin)/height*(ai+0.5);
-
 //		vals[0] = amin + (amax-amin)/height*(ai+0.5);
 		ftype.per_line(vals, ai);
 		
@@ -167,6 +182,18 @@ void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::strin
 
 void make_ppm()
 {
+	if (!outfile.empty())
+	{
+		std::string outfile_ppm = outfile;
+		if (!outfile_ppm.ends_with(".ppm"))
+			outfile_ppm += ".ppm";
+		of = fopen(outfile_ppm.c_str(), "wb");
+		if (!of)
+		{
+			throw std::runtime_error("Cannot open output file \"" + outfile_ppm + "\"");
+		}
+	}
+
 	// RGB image:
 	std::vector<std::vector<RGB>> img;
 	img.resize(asize);
@@ -182,26 +209,31 @@ void make_ppm()
 	}
 	
 	// PPM header
-	printf("P6\n");
-	fflush(stdout);
+	fprintf( of,"P6\n");
+	fflush(of);
 	lyapunov(img, nmax, seq, cmin, valueD, valueE);
-	printf("# Lyapunov: max_iter=%d  seq='%s'  a=%f ... %f  b=%f ... %f  c=%f  ",
+	fprintf(of, "# Lyapunov: max_iter=%d  seq='%s'  a=%f ... %f  b=%f ... %f  c=%f  ",
 		nmax, seq.c_str(), amin, amax, bmin, bmax, cmin );
 	
-	if(setD) printf(" D=%f", valueD);
-	if(setE) printf(" E=%f", valueE);
-	if(setF) printf(" F=%f", valueF);
+	if(setD) fprintf(of," D=%f", valueD);
+	if(setE) fprintf(of, " E=%f", valueE);
+	if(setF) fprintf(of, " F=%f", valueF);
 	
-	printf("\n"
+	fprintf(of, "\n"
 		"%d %d 255\n",
 		bsize, asize
 		);
 	
 	for(const auto& row : img)
 	{
-		fwrite(row.data(), sizeof(RGB), row.size(), stdout);
+		fwrite(row.data(), sizeof(RGB), row.size(), of);
 	}
-	fflush(stdout);
+	fflush(of);
+
+	if (!outfile.empty())
+	{
+		fclose(of);
+	}
 }
 
 
@@ -217,13 +249,24 @@ uint8_t get(const std::vector<std::vector<std::vector<uint8_t>>>& img, int x, in
 
 void make_3df()
 {
+	if (!outfile.empty())
+	{
+		std::string outfile_3df = outfile;
+		if (!outfile_3df.ends_with(".3df"))
+			outfile_3df += ".3df";
+		of = fopen(outfile_3df.c_str(), "wb");
+		if (!of)
+		{
+			throw std::runtime_error("Cannot open output file \"" + outfile_3df + "\"");
+		}
+	}
 	// 3df header
-	printf("%c%c%c%c%c%c",
+	fprintf(of, "%c%c%c%c%c%c",
 		bsize >> 8, bsize & 255,
 		asize >> 8, asize & 255,
 		csize >> 8, csize & 255
 	);
-	fflush(stdout);
+	fflush(of);
 	
 	// 3 images:
 	std::vector<std::vector<std::vector<uint8_t>>> img;
@@ -254,20 +297,40 @@ void make_3df()
 				u += get(img, x+dx, y+dy, z );
 			}
 			const uint8_t u8 = u/27;
-			fputc(u8, stdout);
+			fputc(u8, of);
 		}
-		fflush(stdout);
+		fflush(of);
 		img[0].swap(img[1]);
 		img[1].swap(img[2]);
 	}
+
+	if (!outfile.empty())
+	{
+		fclose(of);
+	}
 }
 
+void print_type_help()
+{
+	printf("Fractal types:\n"
+		"\tplain : A=y axis, B=x axis, C=z axis (animation or 3rd dimension), D=fix, E=fix\n"
+		"\tcircle: C+D circle"
+	);
+}
+
+void print_format_help()
+{
+	printf("Output formats:\n"
+		"\tppm : a PPM file or series of PPM files (if -o is given) or concatenated series of PPM images to stdout (of no -o given)\n"
+		"\t3df : a 3DF voxel file\n"
+	);
+}
 
 int main(int argc, char** argv)
 {
 	const auto program_start = std::chrono::system_clock::now();
 	int a;
-	while( (a=getopt(argc, argv, "W:H:f:c:x:y:z:X:Y:Z:s:i:C:D:E:F:")) != -1 )
+	while( (a=getopt(argc, argv, "W:H:f:c:x:y:z:X:Y:Z:s:i:o:O:t:C:D:E:F:")) != -1 )
 	{
 		switch(a)
 		{
@@ -283,6 +346,9 @@ int main(int argc, char** argv)
 			case 'Y': amax = atof(optarg);  break;
 			case 's': seq = optarg;         break;
 			case 'i': nmax = atoi(optarg);  break;
+			case 't': type = optarg;        break;
+			case 'o': outfile = optarg;     break;
+			case 'O': format = optarg;      break;
 			case 'C': cmin   = atof(optarg); setC = true; break;
 			case 'D': valueD = atof(optarg); setD = true; break;
 			case 'E': valueE = atof(optarg); setE = true; break;
@@ -292,14 +358,19 @@ int main(int argc, char** argv)
 				fprintf(stderr, 
 					"Generate a Lyapunov fractal as PPM or 3df to stdout.\n\n"
 					"Usage: %s [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]\n"
+					"     [-t fractal_type ] [-o output_filename_base] [-O format]\n"
 					"   { [-c center_x:center_y:size] | [-x min_x] [-X max_x] [-y min_y] [-Y max_y] } [-z min_z] [-Z max_z]\n"
 					"     [-C value] [-D value] [-E value] [-F value]\n"
 					"\n"
 					"\t-W width  : width of image in pixel (default: %i)\n"
 					"\t-H height : height of image in pixel (default: %i)\n"
-					"\t-F frames : number of frames or size in in z direction\n"
+					"\t-f frames : number of frames or size in in z direction\n"
 					"\t-s seq    : AB or ABC sequence for fractal (default: \"%s\")\n"
 					"\t-i iter   : iterations per pixel (default: %i)\n"
+					"\n"
+					"\t-t type    : fractal type (default: %s, run \"-t help\" to get a list of types)\n"
+					"\t-o outfile : basename of the output file (stdout if not given)\n"
+					"\t-O format  : either \"pnm\" for image (series) or \"3df\" for 3D voxel file (default: \"%s\")\n"
 					"\n"
 					"\t-c cx:cy:x_size : center coordinates and size.\n"
 					"\t   The x, X, y and Y values will be calculated from them automatically:\n"
@@ -313,6 +384,7 @@ int main(int argc, char** argv)
 					"\t-D value  : value for 4th dimension (default %f)\n"
 					"\t-E value  : value for 5th dimension (default %f)\n"
 					, argv[0], bsize, asize, seq.c_str(), nmax,
+					type.c_str(), format.c_str(),
 					bmin, bmax, amin, amax, cmin, cmin, valueD, valueE
 					);
 					return 1;
@@ -346,18 +418,26 @@ int main(int argc, char** argv)
 		fputc('\n', stderr);
 	}
 
+	fprintf(stderr, "Run with %d threads...\n", omp_get_max_threads());
+	of = stdout;
+	
 #ifdef _WIN32
 	setmode(fileno(stdout),O_BINARY);
 	setmode(fileno(stdin),O_BINARY);
 #endif
 
-	if(csize)
+	switch (case_hash(format))
 	{
-		make_3df();
-	}else{
-		make_ppm();
+		case "pnm"_case   : [[fallthrough]];
+		case "ppm"_case   : make_ppm(); break;
+
+		case "3df"_case   : make_3df(); break;
+
+		case "help"_case  : [[fallthrough]];
+		case "-h"_case    : [[fallthrough]];
+		case "--help"_case: print_format_help(); break;
 	}
-	
+
 	fflush(stdout);
 	const auto program_end = std::chrono::system_clock::now();
 	const std::chrono::hh_mm_ss hms{ program_end - program_start};
