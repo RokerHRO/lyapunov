@@ -3,14 +3,15 @@
 #include <deque>
 
 std::deque<std::string> sequences;
+unsigned base = 2;
 
 std::string make_ab(unsigned long long u)
 {
 	std::string ab;
 	while(u)
 	{
-		ab = (u&1 ? 'A' : 'B') + ab;
-		u = u/2;
+		ab = char('A'+(u%base))  + ab;
+		u = u/base;
 	}
 	return ab;
 }
@@ -26,6 +27,13 @@ std::string operator*(const std::string& o, unsigned count)
 	return ret;
 }
 
+std::string swap_ab(std::string ab)
+{
+	for (char& c : ab) { if (c=='A') c='#'; }
+	for (char& c : ab) { if (c=='B') c='A'; }
+	for (char& c : ab) { if (c=='#') c='B'; }
+	return ab;
+}
 
 // return true if 'ab' is a repetition of an already found sequence
 bool is_repetition(const std::string& ab)
@@ -51,15 +59,30 @@ bool is_repetition(const std::string& ab)
 }
 
 
-int main()
+int main(int argc, char** argv)
 {
+	if (argc>1)
+	{
+		base = atoi(argv[1]);
+		if (base<2 || base>6)
+			base=2;
+	}
+
 	for(unsigned long long u=1;; ++u)
 	{
 		std::string ab = make_ab(u);
-		if(ab.find('B') != std::string::npos && !is_repetition(ab))
-		{
-			std::cout << ab << std::endl;
-			sequences.emplace_back(std::move(ab));
-		}
+		if (ab.find('A') == std::string::npos)
+			continue;
+		if (ab.find('B') == std::string::npos)
+			continue;
+		if (is_repetition(ab))
+			continue;
+
+		const auto swapped = swap_ab(ab);
+		if (std::ranges::find(sequences, swapped ) != sequences.end())
+			continue;
+
+		std::cout << ab << std::endl;
+		sequences.emplace_back(std::move(ab));
 	}
 }
