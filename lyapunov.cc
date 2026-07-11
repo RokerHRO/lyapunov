@@ -28,7 +28,7 @@ std::string format = "pnm";
 std::string outfile;
 
 double cmin = 2.5; // We go to 3rd dimension! \o/
-double cmax = 4.0; // for 3df files
+double cmax = 4.0; // 
 
 double amin = 3.999;
 double amax = 2.4;
@@ -66,6 +66,30 @@ struct RGB
 };
 
 
+std::string replace_all(std::string orig, std::string_view search, std::string_view replacement)
+{
+	std::string::size_type pos = orig.find(search);
+	while (pos < orig.size())
+	{
+		orig.replace(pos, search.length(), replacement);
+		pos = orig.find(search, pos + replacement.length());
+	}
+
+	return orig;
+}
+
+
+std::string decorate_filename(std::string filename, const unsigned frame_nr)
+{
+	char frame_nr_string[16] = {};
+	const unsigned digits = snprintf(nullptr, 0, "%u", csize-1);
+	snprintf(frame_nr_string, sizeof(frame_nr_string), "%0*u", digits, frame_nr);
+	filename = replace_all(filename, "{s}", seq);
+	filename = replace_all(filename, "{i}", std::to_string(nmax) );
+	filename = replace_all(filename, "{f}", frame_nr_string);
+	return filename;
+}
+
 template<class PXL>
 PXL lambda2pxl(double lambda);
 
@@ -100,7 +124,6 @@ uint8_t lambda2pxl<uint8_t>(double lambda)
 template<class PXL>
 void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::string& sequence, double c, double d, double e)
 {
-
 	double min_x = +HUGE_VAL;
 	double max_x = -HUGE_VAL;
 	double min_lambda = +HUGE_VAL;
@@ -180,18 +203,24 @@ void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::strin
 }
 
 
-void make_ppm()
+void make_ppm(unsigned frame_nr, double c)
 {
 	if (!outfile.empty())
 	{
-		std::string outfile_ppm = outfile;
+		std::string outfile_ppm = decorate_filename(outfile, frame_nr);
 		if (!outfile_ppm.ends_with(".ppm"))
 			outfile_ppm += ".ppm";
+
 		of = fopen(outfile_ppm.c_str(), "wb");
 		if (!of)
 		{
 			throw std::runtime_error("Cannot open output file \"" + outfile_ppm + "\"");
 		}
+
+		fprintf(stderr, "=== Write frame #%u  c=%f to file \"%s\" ===\n", frame_nr, c, outfile_ppm.c_str());
+	}else
+	{
+		fprintf(stderr, "=== Write frame #%u  c=%f to stdout ===\n", frame_nr, c);
 	}
 
 	// RGB image:
@@ -201,19 +230,13 @@ void make_ppm()
 	{
 		row.resize(bsize);
 	}
-	
-	prob.resize(asize);
-	for(auto& row : prob)
-	{
-		row.resize(bsize);
-	}
-	
+
 	// PPM header
 	fprintf( of,"P6\n");
 	fflush(of);
-	lyapunov(img, nmax, seq, cmin, valueD, valueE);
+	lyapunov(img, nmax, seq, c, valueD, valueE);
 	fprintf(of, "# Lyapunov: max_iter=%d  seq='%s'  a=%f ... %f  b=%f ... %f  c=%f  ",
-		nmax, seq.c_str(), amin, amax, bmin, bmax, cmin );
+		nmax, seq.c_str(), amin, amax, bmin, bmax, c );
 	
 	if(setD) fprintf(of," D=%f", valueD);
 	if(setE) fprintf(of, " E=%f", valueE);
@@ -236,6 +259,17 @@ void make_ppm()
 	}
 }
 
+void make_ppm()
+{
+	if (csize==0)
+	{
+		make_ppm(0, cmin);
+	}else for (int frame_nr=0; frame_nr < csize; ++frame_nr)
+	{
+		const double c = cmin + (cmax-cmin)/(csize-1)*frame_nr;
+		make_ppm(frame_nr, c);
+	}
+}
 
 inline
 uint8_t get(const std::vector<std::vector<std::vector<uint8_t>>>& img, int x, int y, int z)
@@ -379,13 +413,13 @@ int main(int argc, char** argv)
 					"\t-y min_y  : minimum y value (default: %f)\n"
 					"\t-Y max_y  : maximum y value (default: %f)\n"
 					"\t-z min_z  : 3rd dimension: (start) value of z. (selected by \"C\" in sequence string. default: %f)\n"
-					"\t-Z max_z  : maximum value of z (used for 3df files) \n"
+					"\t-Z max_z  : maximum value of z (default: %f) \n"
 					"\t-C value  : value for 3th dimension (default %f)\n"
 					"\t-D value  : value for 4th dimension (default %f)\n"
 					"\t-E value  : value for 5th dimension (default %f)\n"
 					, argv[0], bsize, asize, seq.c_str(), nmax,
 					type.c_str(), format.c_str(),
-					bmin, bmax, amin, amax, cmin, cmin, valueD, valueE
+					bmin, bmax, amin, amax, cmin, cmax, cmin, valueD, valueE
 					);
 					return 1;
 		}
@@ -420,7 +454,7 @@ int main(int argc, char** argv)
 
 	fprintf(stderr, "Run with %d threads...\n", omp_get_max_threads());
 	of = stdout;
-	
+
 #ifdef _WIN32
 	setmode(fileno(stdout),O_BINARY);
 	setmode(fileno(stdin),O_BINARY);
