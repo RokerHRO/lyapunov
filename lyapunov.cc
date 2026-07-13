@@ -28,7 +28,7 @@ std::string format = "pnm";
 std::string outfile;
 
 double cmin = 2.5; // We go to 3rd dimension! \o/
-double cmax = 4.0; // 
+double cmax = 4.0; //
 
 double amin = 3.999;
 double amax = 2.4;
@@ -51,6 +51,7 @@ int csize = 0;  // value >0 lets create 3df file instead of PPM
 int nmax = 1000;                /* number of rounds */
 
 FILE* of = nullptr;
+FractalType* fractal_type = nullptr;
 
 /* for color generation; somewhat empirical, in order to match Wickerprint's original colors */
 double lambda_min = -2.55;
@@ -94,7 +95,7 @@ template<class PXL>
 PXL lambda2pxl(double lambda);
 
 template<>
-RGB lambda2pxl<RGB>(double lambda)
+RGB lambda2pxl<RGB>(const double lambda)
 {
 	double r=0,g=0,b=0;
 	if (lambda > 0)
@@ -114,7 +115,7 @@ RGB lambda2pxl<RGB>(double lambda)
 }
 
 template<>
-uint8_t lambda2pxl<uint8_t>(double lambda)
+uint8_t lambda2pxl<uint8_t>(const double lambda)
 {
 	return CLAMP( 127 - lambda*100 );
 }
@@ -122,7 +123,7 @@ uint8_t lambda2pxl<uint8_t>(double lambda)
 
 // extension: 3rd dimension: value c is fixed, selected by 'C' in sequence string
 template<class PXL>
-void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::string& sequence, double c, double d, double e)
+void lyapunov(std::vector<std::vector<PXL>>& img, const int max_iter, const std::string& sequence, const FractalType& ftype, const unsigned frame)
 {
 	double min_x = +HUGE_VAL;
 	double max_x = -HUGE_VAL;
@@ -131,20 +132,14 @@ void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::strin
 
 	const int height = img.size();
 	const int width  = img[0].size();
-	Dimension da{unsigned(height), amin, amax};
-	Dimension db{ unsigned(width), bmin, bmax};
 
 	constexpr unsigned THREADS = 32;
-	double tvals[THREADS][5] = { {0.0, 0.0, c, d, e } };
+	double tvals[THREADS][5] = { };
+
 	for (unsigned t=0; t<THREADS; ++t)
 	{
-		tvals[t][2] = c;
-		tvals[t][3] = d;
-		tvals[t][4] = e;
+		ftype.per_image(tvals[t], frame);
 	}
-
-	SimpleFractalType ftype(da, db, c, d, e);
-//	ftype.per_image(vals);
 
 #pragma omp parallel for schedule(dynamic)
 	for (int ai = 0; ai <height; ++ai)
@@ -153,18 +148,16 @@ void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::strin
 		double* vals = tvals[tn];
 //		const double a = amin + (amax-amin)/height*(ai+0.5);
 //		vals[0] = amin + (amax-amin)/height*(ai+0.5);
-		ftype.per_line(vals, ai);
-		
-		double sum_log_deriv, prod_deriv, x;
+		ftype.per_line(vals, frame, ai);
+
 		fprintf(stderr, "\r%4d of %4d   ", ai, height);
 		for (int bi = 0; bi < width; ++bi)
 		{
 //			const double b = bmin + (bmax-bmin)/width*(bi+0.5);
-			
 //			vals[1] = bmin + (bmax-bmin)/width*(bi+0.5);
-			ftype.per_pixel(vals, ai, bi);
+			ftype.per_pixel(vals, frame, ai, bi);
 
-			x = 0.5;
+			double x = 0.5;
 			/* one round without derivating, so that the value 0.5 is avoided */
 			for (unsigned m = 0; m < sequence.length(); m++)
 			{
@@ -172,10 +165,10 @@ void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::strin
 				const double r = vals[ch-'A']; //ch=='B' ? b : (ch=='A' ? a : c);
 				x = r*x*(1-x);
 			}
-			sum_log_deriv = 0;
+			double sum_log_deriv = 0;
 			for (int n = 0; n < max_iter; n++)
 			{
-				prod_deriv = 1;
+				double prod_deriv = 1;
 				for (unsigned m = 0; m < sequence.length(); m++)
 				{
 					const char ch = sequence[m];
@@ -187,12 +180,12 @@ void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::strin
 				sum_log_deriv += log(fabs(prod_deriv));
 			}
 			const double lambda = sum_log_deriv / (nmax*sequence.length());
-			
+			/*
 			if(x>max_x) max_x = x;
 			if(x<min_x) min_x = x;
 			if(lambda>max_lambda) max_lambda = lambda;
 			if(lambda<min_lambda) min_lambda = lambda;
-			
+			*/
 			img[ai][bi] = lambda2pxl<PXL>(lambda);
 		}
 	}
@@ -203,7 +196,7 @@ void lyapunov(std::vector<std::vector<PXL>>& img, int max_iter, const std::strin
 }
 
 
-void make_ppm(unsigned frame_nr, double c)
+void make_ppm(const unsigned frame_nr)
 {
 	if (!outfile.empty())
 	{
@@ -217,10 +210,10 @@ void make_ppm(unsigned frame_nr, double c)
 			throw std::runtime_error("Cannot open output file \"" + outfile_ppm + "\"");
 		}
 
-		fprintf(stderr, "=== Write frame #%u  c=%f to file \"%s\" ===\n", frame_nr, c, outfile_ppm.c_str());
+		fprintf(stderr, "=== Write frame #%u to file \"%s\" ===\n", frame_nr, outfile_ppm.c_str());
 	}else
 	{
-		fprintf(stderr, "=== Write frame #%u  c=%f to stdout ===\n", frame_nr, c);
+		fprintf(stderr, "=== Write frame #%u to stdout ===\n", frame_nr);
 	}
 
 	// RGB image:
@@ -234,9 +227,10 @@ void make_ppm(unsigned frame_nr, double c)
 	// PPM header
 	fprintf( of,"P6\n");
 	fflush(of);
-	lyapunov(img, nmax, seq, c, valueD, valueE);
-	fprintf(of, "# Lyapunov: max_iter=%d  seq='%s'  a=%f ... %f  b=%f ... %f  c=%f  ",
-		nmax, seq.c_str(), amin, amax, bmin, bmax, c );
+	lyapunov(img, nmax, seq, *fractal_type, frame_nr);
+	fprintf(of, "# Lyapunov: '%s' max_iter=%d  seq='%s'  a=%f ... %f  b=%f ... %f ",
+		fractal_type->name(),
+		nmax, seq.c_str(), amin, amax, bmin, bmax);
 	
 	if(setD) fprintf(of," D=%f", valueD);
 	if(setE) fprintf(of, " E=%f", valueE);
@@ -263,16 +257,15 @@ void make_ppm()
 {
 	if (csize==0)
 	{
-		make_ppm(0, cmin);
+		make_ppm(0);
 	}else for (int frame_nr=0; frame_nr < csize; ++frame_nr)
 	{
-		const double c = cmin + (cmax-cmin)/(csize-1)*frame_nr;
-		make_ppm(frame_nr, c);
+		make_ppm(frame_nr);
 	}
 }
 
 inline
-uint8_t get(const std::vector<std::vector<std::vector<uint8_t>>>& img, int x, int y, int z)
+uint8_t get(const std::vector<std::vector<std::vector<uint8_t>>>& img, const int x, const int y, const int z)
 {
 //	if( unsigned(z)>=img.size() ) return 0;
 	if( unsigned(y)>=img[z].size() ) return 0;
@@ -317,7 +310,7 @@ void make_3df()
 	{
 		const double c = cmin + (cmax-cmin)/(csize-1)*ci;
 		fprintf(stderr, "Frame %i of %i. c=%f \n", ci, csize, c);
-		lyapunov(img[2], nmax, seq, c, valueD, valueE);
+		lyapunov(img[2], nmax, seq, *fractal_type, ci);
 		
 		fprintf(stderr,"\tblurring...\n");
 		for(int y=0; y<asize; ++y)
@@ -344,17 +337,18 @@ void make_3df()
 	}
 }
 
-void print_type_help()
+void print_type_help(FILE* f)
 {
-	printf("Fractal types:\n"
-		"\tplain : A=y axis, B=x axis, C=z axis (animation or 3rd dimension), D=fix, E=fix\n"
-		"\tcircle: C+D circle"
+	fprintf(f, "Fractal types:\n"
+		"\tplain  : A=y axis, B=x axis, C=z axis (animation or 3rd dimension), D=fix, E=fix\n"
+		"\t6sides : animated cruise through all 6 sides of the ABC cube. D=fix, E=fix\n"
+		"\tcircle : C+D circle\n"
 	);
 }
 
-void print_format_help()
+void print_format_help(FILE* f)
 {
-	printf("Output formats:\n"
+	fprintf(f, "Output formats:\n"
 		"\tppm : a PPM file or series of PPM files (if -o is given) or concatenated series of PPM images to stdout (of no -o given)\n"
 		"\t3df : a 3DF voxel file\n"
 	);
@@ -460,6 +454,22 @@ int main(int argc, char** argv)
 	setmode(fileno(stdin),O_BINARY);
 #endif
 
+	const Dimension dim_a{unsigned(asize), amin, amax};
+	const Dimension dim_b{unsigned(bsize), bmin, bmax};
+	const Dimension dim_c{unsigned(csize), cmin, cmax};
+
+	switch (case_hash(type))
+	{
+		case "plain"_case  : fractal_type = new SimpleFractalType(dim_a, dim_b, dim_c, valueD, valueE); break;
+		case "6sides"_case : fractal_type = new SixSide(dim_a, dim_b, dim_c, valueD, valueE); break;
+		case "circle"_case : throw std::logic_error("Unimplemented"); break;
+		
+		case "help"_case   : [[fallthrough]];
+		case "-h"_case     : [[fallthrough]];
+		case "--help"_case : print_type_help(stdout); return 0;
+		default: print_type_help(stderr); return 1;
+	}
+
 	switch (case_hash(format))
 	{
 		case "pnm"_case   : [[fallthrough]];
@@ -469,7 +479,8 @@ int main(int argc, char** argv)
 
 		case "help"_case  : [[fallthrough]];
 		case "-h"_case    : [[fallthrough]];
-		case "--help"_case: print_format_help(); break;
+		case "--help"_case: print_format_help(stdout); return 0;
+		default: print_format_help(stderr); return 1;
 	}
 
 	fflush(stdout);
