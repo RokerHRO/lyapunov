@@ -57,16 +57,16 @@ public:
 
 	const char* name() const override { return "plain"; }
 
-private:
+protected:
 	const Dimension c;
 	const double d;
 	const double e;
 };
 
-class SixSide : public FractalType {
+class SixSide : public SimpleFractalType {
 	public:
-	SixSide(const Dimension& a, const Dimension& b, const Dimension& _c, double _d, double _e)
-	: FractalType(a, b), c(_c), d(_d), e(_e), sin_cos{calculate_sincos()}
+	SixSide(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e)
+	: SimpleFractalType(_a, _b, _c, _d, _e), sin_cos{calculate_sincos()}
 	{}
 
 	void per_image(double values[5], unsigned frame) const override;
@@ -78,12 +78,20 @@ private:
 	struct SinCos {double s,c;};
 
 	std::vector<SinCos> calculate_sincos() const;
-	const Dimension c;
-	const double d;
-	const double e;
 
 	const std::vector<SinCos> sin_cos;
 };
 
+
+class Circle : public SimpleFractalType {
+public:
+	Circle(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e)
+	: SimpleFractalType(_a, _b, _c, _d, _e)
+	{}
+
+	void per_image(double values[5], unsigned frame) const override;
+	const char* name() const override { return "circle"; }
+
+};
 
 #endif // FRACTAL_TYPE_HH

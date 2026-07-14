@@ -27,3 +27,20 @@ std::vector<SixSide::SinCos> SixSide::calculate_sincos() const
 	}
 	return result;
 }
+
+void Circle::per_image(double values[5], unsigned frame) const
+{
+	if (c.size==0)
+	{
+		values[2] = c.min;
+		values[3] = d;
+		values[4] = e;
+	}else{
+		const double cm = (c.min + c.max)/2;
+		const double r = abs(c.max - c.min);
+		const double phi = frame * 2*M_PI / c.size;
+		values[2] = cm - r*cos(phi);
+		values[3] = d + r*sin(phi);
+		values[4] = e;
+	}
+}

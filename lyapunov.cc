@@ -190,9 +190,7 @@ void lyapunov(std::vector<std::vector<PXL>>& img, const int max_iter, const std:
 		}
 	}
 	
-	fprintf(stderr, " x=%f ... %f ; lambda=%f ... %f \n",
-			min_x, max_x, min_lambda, max_lambda );
-	
+	fputs(" \n", stderr);
 }
 
 
@@ -231,8 +229,9 @@ void make_ppm(const unsigned frame_nr)
 	fprintf(of, "# Lyapunov: '%s' max_iter=%d  seq='%s'  a=%f ... %f  b=%f ... %f ",
 		fractal_type->name(),
 		nmax, seq.c_str(), amin, amax, bmin, bmax);
-	
-	if(setD) fprintf(of," D=%f", valueD);
+
+	if(setC) fprintf(of, " frame=%u/%u  C=%f ... %f", frame_nr, csize, cmin, cmax);
+	if(setD) fprintf(of, " D=%f", valueD);
 	if(setE) fprintf(of, " E=%f", valueE);
 	if(setF) fprintf(of, " F=%f", valueF);
 	
@@ -364,9 +363,9 @@ int main(int argc, char** argv)
 		{
 			case 'W': bsize = atoi(optarg); break;
 			case 'H': asize = atoi(optarg); break;
-			case 'f': csize = atoi(optarg); break;
-			case 'z': cmin  = atof(optarg); break;
-			case 'Z': cmax  = atof(optarg); break;
+			case 'f': csize = atoi(optarg); setC = true; break;
+			case 'z': cmin  = atof(optarg); setC = true; break;
+			case 'Z': cmax  = atof(optarg); setC = true; break;
 			case 'c': center = optarg;      break;
 			case 'x': bmin = atof(optarg);  break;
 			case 'y': amin = atof(optarg);  break;
@@ -398,6 +397,7 @@ int main(int argc, char** argv)
 					"\n"
 					"\t-t type    : fractal type (default: %s, run \"-t help\" to get a list of types)\n"
 					"\t-o outfile : basename of the output file (stdout if not given)\n"
+					"\t             These patterns are replaced: {s}: sequence, {i}: iter, {f}: frame_nr\n"
 					"\t-O format  : either \"pnm\" for image (series) or \"3df\" for 3D voxel file (default: \"%s\")\n"
 					"\n"
 					"\t-c cx:cy:x_size : center coordinates and size.\n"
@@ -462,7 +462,7 @@ int main(int argc, char** argv)
 	{
 		case "plain"_case  : fractal_type = new SimpleFractalType(dim_a, dim_b, dim_c, valueD, valueE); break;
 		case "6sides"_case : fractal_type = new SixSide(dim_a, dim_b, dim_c, valueD, valueE); break;
-		case "circle"_case : throw std::logic_error("Unimplemented"); break;
+		case "circle"_case : fractal_type = new Circle(dim_a, dim_b, dim_c, valueD, valueE); break;
 		
 		case "help"_case   : [[fallthrough]];
 		case "-h"_case     : [[fallthrough]];
