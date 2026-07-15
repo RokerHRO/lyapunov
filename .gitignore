@@ -27,4 +27,10 @@ Thumbs.db
 # qtcreator generated files
 *.pro.user*
 CMakeLists.txt.user*
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
 
+gen-ab-sequences
+gen_zoom
+lyapunov
