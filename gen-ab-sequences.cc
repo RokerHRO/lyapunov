@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <deque>
+#include <ranges>
 
 std::deque<std::string> sequences;
 unsigned base = 2;
