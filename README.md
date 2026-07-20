@@ -48,7 +48,12 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
 * `plain`  : just a 2D image or an animation of a linear flight through the 3D cube
 * `6sides` : animated cruise through all 6 sides of the ABC cube.
 * `circle` : values for C and D form a circle: Center is at `(z_min + z_max)/2`, D.  Radius is `abs(z_max-z_min)/2`. 
-             Try this example: `lyapunov.exe -W 320 -H 320 -s ABCDBBCDDA -c 3.48:3.48:1 -z 3.1 -Z 3.6 -D 3.375 -o ani-{s}-{f} -f 320 -t circle`
+             Try this example: `lyapunov -W 320 -H 320 -s ABCDBBCDDA -c 3.48:3.48:1 -z 3.1 -Z 3.6 -D 3.375 -o ani-{s}-{f} -f 320 -t circle`
+* `sphere` : a sphere in the ABC cube. D+E can form a circle in animation mode.
+             Try this example: `lyapunov -W 1024 -H 512 -t sphere -x 3.2 -X 3.8 -y 3.2 -Y 3.8 -z 3.1 -Z 3.8 -s ABCBBACC -o sphere.ppm`
+
+<img src="https://raw.githubusercontent.com/RokerHRO/lyapunov/master/img/sphere-2222-ABCBBACC-thumb.jpg" width="512" height="256" align="right" />
+
 
 #### File formats
 * ppm : portable pixmap image, or series of images
