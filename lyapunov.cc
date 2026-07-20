@@ -50,6 +50,8 @@ int csize = 0;  // value >0 lets create 3df file instead of PPM
 
 int nmax = 1000;                /* number of rounds */
 
+std::vector<double> params;
+
 FILE* of = nullptr;
 FractalType* fractal_type = nullptr;
 
@@ -342,6 +344,7 @@ void print_type_help(FILE* f)
 		"\tplain  : A=y axis, B=x axis, C=z axis (animation or 3rd dimension), D=fix, E=fix\n"
 		"\t6sides : animated cruise through all 6 sides of the ABC cube. D=fix, E=fix\n"
 		"\tcircle : C+D circle\n"
+		"\tsphere : Sphere in the ABC cube. D=fix, E=fix\n"
 	);
 }
 
@@ -353,11 +356,24 @@ void print_format_help(FILE* f)
 	);
 }
 
+std::vector<double> parse_params(const char* p)
+{
+	std::vector<double> params;
+	std::istringstream ss(p);
+	double value;
+	while (ss >> value)
+	{
+		params.push_back(value);
+		if (ss.peek() == ',')
+			ss.ignore();
+	}
+	return params;
+}
 int main(int argc, char** argv)
 {
 	const auto program_start = std::chrono::system_clock::now();
 	int a;
-	while( (a=getopt(argc, argv, "W:H:f:c:x:y:z:X:Y:Z:s:i:o:O:t:C:D:E:F:")) != -1 )
+	while( (a=getopt(argc, argv, "W:H:f:c:x:y:z:X:Y:Z:s:i:o:O:t:C:D:E:F:p:")) != -1 )
 	{
 		switch(a)
 		{
@@ -380,6 +396,7 @@ int main(int argc, char** argv)
 			case 'D': valueD = atof(optarg); setD = true; break;
 			case 'E': valueE = atof(optarg); setE = true; break;
 			case 'F': valueF = atof(optarg); setF = true; break;
+			case 'p': params = parse_params(optarg); break;
 			case '?': [[fallthrough]];
 			default:
 				fprintf(stderr, 
@@ -411,6 +428,8 @@ int main(int argc, char** argv)
 					"\t-C value  : value for 3th dimension (default %f)\n"
 					"\t-D value  : value for 4th dimension (default %f)\n"
 					"\t-E value  : value for 5th dimension (default %f)\n"
+					"\n"
+					"\t-p params[,...] : comma-separated list of additional numerical parameters\n"
 					, argv[0], bsize, asize, seq.c_str(), nmax,
 					type.c_str(), format.c_str(),
 					bmin, bmax, amin, amax, cmin, cmax, cmin, valueD, valueE
@@ -435,16 +454,26 @@ int main(int argc, char** argv)
 		amin = cy + dy/2;
 		amax = cy - dy/2;
 		
-		fprintf(stderr, "Interval calculated from \"-c %s\": min_x=%11.9f  max_x=%11.9f  min_y=%11.9f  max_y=%11.9f",
-			center.c_str(), bmin, bmax, amin, amax);
-		
-		if(setC) fprintf(stderr, " C=%f", cmin);
-		if(setD) fprintf(stderr, " D=%f", valueD);
-		if(setE) fprintf(stderr, " E=%f", valueE);
-		if(setF) fprintf(stderr, " F=%f", valueF);
-		
-		fputc('\n', stderr);
+		fprintf(stderr, "Interval calculated from \"-c %s\" ", center.c_str());
 	}
+
+	fprintf(stderr, " min_x=%11.9f  max_x=%11.9f  min_y=%11.9f  max_y=%11.9f", bmin, bmax, amin, amax);
+
+	if(setC) fprintf(stderr, " C=%f ... %f", cmin, cmax);
+	if(setD) fprintf(stderr, " D=%f", valueD);
+	if(setE) fprintf(stderr, " E=%f", valueE);
+	if(setF) fprintf(stderr, " F=%f", valueF);
+	if (!params.empty())
+	{
+		fprintf(stderr, " P=%f", params[0]);
+		for (unsigned u=1; u<params.size(); ++u)
+		{
+			fprintf(stderr, ", %f", params[u]);
+		}
+	}
+
+	fputc('\n', stderr);
+
 
 	fprintf(stderr, "Run with %d threads...\n", omp_get_max_threads());
 	of = stdout;
@@ -463,6 +492,7 @@ int main(int argc, char** argv)
 		case "plain"_case  : fractal_type = new SimpleFractalType(dim_a, dim_b, dim_c, valueD, valueE); break;
 		case "6sides"_case : fractal_type = new SixSide(dim_a, dim_b, dim_c, valueD, valueE); break;
 		case "circle"_case : fractal_type = new Circle(dim_a, dim_b, dim_c, valueD, valueE); break;
+		case "sphere"_case : fractal_type = new Sphere(dim_a, dim_b, dim_c, valueD, valueE, params); break;
 		
 		case "help"_case   : [[fallthrough]];
 		case "-h"_case     : [[fallthrough]];

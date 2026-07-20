@@ -14,9 +14,9 @@ inline void SixSide::per_pixel(double values[5], unsigned frame, unsigned line, 
 {
 }
 
-std::vector<SixSide::SinCos> SixSide::calculate_sincos() const
+std::vector<SinCos> SixSide::calculate_sincos() const
 {
-	std::vector<SixSide::SinCos> result;
+	std::vector<SinCos> result;
 	result.reserve(c.size);
 	for (unsigned i = 0; i < c.size; ++i)
 	{
@@ -43,4 +43,53 @@ void Circle::per_image(double values[5], unsigned frame) const
 		values[3] = d + r*sin(phi);
 		values[4] = e;
 	}
+}
+
+
+void Sphere::per_image(double values[5], unsigned frame) const
+{
+	const double phi = frame * 2*M_PI / c.size;
+	values[3] = d - radius_de * cos(phi);
+	values[4] = e + radius_de * sin(phi);
+}
+
+void Sphere::per_line(double values[5], unsigned frame, unsigned line) const
+{
+	values[0] = center_a - sc_line.at(line).c * radius_a;
+}
+
+void Sphere::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
+{
+	const auto pl = sc_line.at(line);
+	const auto pc = sc_column.at(column);
+	values[1] = center_b + pl.s * pc.c * radius_b;
+	values[2] = center_b - pl.s * pc.s * radius_c;
+}
+
+std::vector<SinCos> Sphere::calculate_line_vector() const
+{
+	std::vector<SinCos> result;
+	result.reserve(a.size);
+	for (unsigned i = 0; i < a.size; ++i)
+	{
+		const double phi = i*M_PI/a.size;
+		const double ss = sin(phi);
+		const double cc = cos(phi);
+		result.emplace_back(ss,cc);
+	}
+	return result;
+}
+
+std::vector<SinCos> Sphere::calculate_column_vector() const
+{
+	std::vector<SinCos> result;
+	result.reserve(b.size);
+	for (unsigned i = 0; i < b.size; ++i)
+	{
+		const double phi = i*(2*M_PI)/b.size;
+		const double ss = sin(phi);
+		const double cc = cos(phi);
+		result.emplace_back(ss,cc);
+	}
+	return result;
 }
