@@ -47,12 +47,8 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
 #### Fractal types
 * `plain`  : just a 2D image or an animation of a linear flight through the 3D cube
 * `6sides` : animated cruise through all 6 sides of the ABC cube.
-* `circle` : values for C and D form a circle: Center is at `(z_min + z_max)/2`, D.  Radius is `abs(z_max-z_min)/2`. 
-             Try this example: `lyapunov -W 320 -H 320 -s ABCDBBCDDA -c 3.48:3.48:1 -z 3.1 -Z 3.6 -D 3.375 -o ani-{s}-{f} -f 320 -t circle`
+* `circle` : values for C and D form a circle: Center is at `(z_min + z_max)/2`, D.  Radius is `abs(z_max-z_min)/2`.
 * `sphere` : a sphere in the ABC cube. D+E can form a circle in animation mode.
-             Try this example: `lyapunov -W 1024 -H 512 -t sphere -x 3.2 -X 3.8 -y 3.2 -Y 3.8 -z 3.1 -Z 3.8 -s ABCBBACC -o sphere.ppm`
-
-<img src="https://raw.githubusercontent.com/RokerHRO/lyapunov/master/img/sphere-2222-ABCBBACC-thumb.jpg" width="512" height="256" align="right" />
 
 
 #### File formats
@@ -67,6 +63,24 @@ or by converting them to a video file, e.g. with ffmpeg:
 ```
 ffmpeg -i ani-ABCD-%03d.ppm -r 25 ani.mp4
 ```
+
+### Examples
+
+#### Circle animation
+<img src="img/anim-circle-ABCDBBCDDA.gif" align="right">
+
+`lyapunov -W 320 -H 320 -f 320 -t circle -s ABCDBBCDDA -c 3.48:3.48:1 -z 3.1 -Z 3.6 -D 3.375 -o ani-{s}-{f}`
+
+<br clear="all">
+
+#### Sphere
+<img src="img/sphere-2222-ABCBBACC-thumb.jpg" width="512" height="256" align="right" />
+
+`lyapunov -W 1024 -H 512 -t sphere -x 3.2 -X 3.8 -y 3.2 -Y 3.8 -z 3.1 -Z 3.8 -s ABCBBACC -o sphere.ppm`
+
+This image is a "spherical mapping" that can be used e.g. with POV-Ray to render a 3D image.
+
+<br clear="all" />
 
 ## gen-ab-sequences
 Prints all non-repetitive AB sequences (that starts with A) to stdout. Sequences starting with B would produce the same images as the sequences with all A's and B's interchanged, except mirrored by the x=y axis.
