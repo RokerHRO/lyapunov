@@ -8,7 +8,7 @@ sphere
 		image_map
 		{
 //			jpeg "../img/sphere-2222-ABCBBACC-thumb.jpg"
-			png "../sphere.png"
+			png "sphere.png"
 			map_type 1
 			interpolate 2
 		}
