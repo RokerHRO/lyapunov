@@ -85,6 +85,7 @@ This image is a "spherical mapping" that can be used e.g. with POV-Ray to render
 
 Animation: https://github.com/user-attachments/assets/938d0b7e-1d54-40de-93c9-f0879bf6ffdf
 
+A second animation example is in the pov/ directory.
 
 
 <br clear="all" />
