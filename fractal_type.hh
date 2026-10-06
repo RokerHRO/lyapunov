@@ -3,6 +3,7 @@
 #define FRACTAL_TYPE_HH
 
 #include <vector>
+#include <cmath>
 
 struct Dimension
 {
@@ -82,6 +83,11 @@ class SixSide : public SimpleFractalType
 private:
 
 	[[nodiscard]] std::vector<SinCos> calculate_sincos() const;
+	double sin_slide(double phi, const Dimension& dim) const
+	{
+		const double ds = dim.max - dim.min;
+		return dim.max - ds*std::cos(phi);
+	}
 
 	const std::vector<SinCos> sin_cos;
 };

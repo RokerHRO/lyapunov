@@ -34,3 +34,12 @@ cmake_install.cmake
 gen-ab-sequences
 gen_zoom
 lyapunov
+
+# CMake build directory and executables
+cmake-build-release/
+build/
+*.exe
+
+# IDE settings and generated examples
+.idea/
+examples/
