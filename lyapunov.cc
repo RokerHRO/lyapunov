@@ -310,7 +310,7 @@ void make_3df()
 	
 	for(int ci=0; ci<csize; ++ci)
 	{
-		const double c = cmin + (cmax-cmin)/(csize-1)*ci;
+		const double c = (csize > 1) ? cmin + (cmax-cmin)/(csize-1)*ci : (cmin+cmax)/2;
 		fprintf(stderr, "Frame %i of %i. c=%f \n", ci, csize, c);
 		lyapunov(img[2], nmax, seq, *fractal_type, ci);
 		
@@ -346,6 +346,10 @@ void print_type_help(FILE* f)
 		"\t6sides : animated cruise through all 6 sides of the ABC cube. D=fix, E=fix\n"
 		"\tcircle : C+D circle\n"
 		"\tsphere : Sphere in the ABC cube. D=fix, E=fix\n"
+		"\ttileable : A and B each trace a full circle, so the image tiles seamlessly in both directions\n"
+		"\ttileable-loop : tileable, plus C+D circle over the frames, so the animation loops seamlessly\n"
+		"\tzoom : fly-through into the (A,B) plane: each frame scales the rectangle about its center and rotates it\n"
+		"\t            -p <zoom_factor_per_frame>,<rotation_radians_per_frame>  (default 0.95,0.02; 0<f<1: zoom in, f>1: zoom out)\n"
 	);
 }
 
@@ -452,6 +456,12 @@ int main(int argc, char** argv)
 		return 2;
 	}
 
+	if(nmax <= 0)
+	{
+		fprintf(stderr, "max_iter must be > 0 (got %d).\n", nmax);
+		return 2;
+	}
+
 	if(!center.empty())
 	{
 		double cx=0.0, cy=0.0, dx=0.0;
@@ -507,11 +517,20 @@ int main(int argc, char** argv)
 		case "6sides"_case : fractal_type = new SixSide(dim_a, dim_b, dim_c, valueD, valueE); break;
 		case "circle"_case : fractal_type = new Circle(dim_a, dim_b, dim_c, valueD, valueE); break;
 		case "sphere"_case : fractal_type = new Sphere(dim_a, dim_b, dim_c, valueD, valueE, params); break;
+		case "tileable"_case : fractal_type = new Tileable(dim_a, dim_b, dim_c, valueD, valueE); break;
+		case "tileable-loop"_case : fractal_type = new TileableLoop(dim_a, dim_b, dim_c, valueD, valueE); break;
+		case "zoom"_case : fractal_type = new Zoom(dim_a, dim_b, dim_c, valueD, valueE, params); break;
 		
 		case "help"_case   : [[fallthrough]];
 		case "-h"_case     : [[fallthrough]];
 		case "--help"_case : print_type_help(stdout); return 0;
 		default: print_type_help(stderr); return 1;
+	}
+
+	if (case_hash(format) == "3df"_case && csize <= 0)
+	{
+		fprintf(stderr, "3df output requires a z dimension: use -f <frames>.\n");
+		return 2;
 	}
 
 	switch (case_hash(format))

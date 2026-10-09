@@ -44,7 +44,7 @@ public:
 
 	void per_image(double values[5], unsigned frame) const override
 	{
-		values[2] = c.min + (c.max-c.min)/c.size*(frame+0.5);
+		values[2] = (c.size > 0) ? c.min + (c.max-c.min)/c.size*(frame+0.5) : c.min;
 		values[3] = d;
 		values[4] = e;
 	}
@@ -129,5 +129,66 @@ private:
 	const std::vector<SinCos> sc_line;
 	const std::vector<SinCos> sc_column;
 	const double radius_de;
+};
+
+
+class Tileable : public SimpleFractalType
+{
+public:
+	Tileable(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e)
+	: SimpleFractalType(_a, _b, _c, _d, _e)
+	, center_a((a.max+a.min)/2), radius_a((a.max-a.min)/2)
+	, center_b((b.max+b.min)/2), radius_b((b.max-b.min)/2)
+	, sin_line{ calculate_sin_line()}, cos_column{ calculate_cos_column()}
+	{}
+
+	void per_line (double values[5], unsigned frame, unsigned line) const override;
+	void per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const override;
+	[[nodiscard]] const char* name() const override { return "tileable"; }
+
+private:
+	[[nodiscard]] std::vector<double> calculate_sin_line() const;
+	[[nodiscard]] std::vector<double> calculate_cos_column() const;
+
+	const double center_a, radius_a, center_b, radius_b;
+	const std::vector<double> sin_line;
+	const std::vector<double> cos_column;
+};
+
+
+class TileableLoop : public Tileable
+{
+public:
+	TileableLoop(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e)
+	: Tileable(_a, _b, _c, _d, _e)
+	{}
+
+	void per_image(double values[5], unsigned frame) const override;
+	[[nodiscard]] const char* name() const override { return "tileable-loop"; }
+};
+
+class Zoom : public SimpleFractalType
+{
+public:
+	// _params: zoom_factor_per_frame, rotation_radians_per_frame (default 0.95, 0.02)
+	Zoom(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e, const std::vector<double>& _params)
+	: SimpleFractalType(_a, _b, _c, _d, _e)
+	, center_a((a.max+a.min)/2), center_b((b.max+b.min)/2), center_c((c.max+c.min)/2)
+	, zoom_factor(_params.size()>0 ? _params[0] : 0.95)
+	, rot_per_frame(_params.size()>1 ? _params[1] : 0.02)
+	, cache_frame(~0u), a_x(0.0), a_y(0.0), b_x(0.0), b_y(0.0)
+	{}
+
+	void per_image(double values[5], unsigned frame) const override;
+	void per_line (double values[5], unsigned frame, unsigned line) const override;
+	void per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const override;
+	[[nodiscard]] const char* name() const override { return "zoom"; }
+
+private:
+	const double center_a, center_b, center_c;
+	const double zoom_factor, rot_per_frame;
+	// per-frame rotation/scale coefficients, cached by per_image (called once per frame before the parallel pixel loop)
+	mutable unsigned cache_frame;
+	mutable double a_x, a_y, b_x, b_y;
 };
 #endif // FRACTAL_TYPE_HH
