@@ -49,6 +49,9 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
 * `6sides` : animated cruise through all 6 sides of the ABC cube.
 * `circle` : values for C and D form a circle: Center is at `(z_min + z_max)/2`, D.  Radius is `abs(z_max-z_min)/2`.
 * `sphere` : a sphere in the ABC cube. D+E can form a circle in animation mode.
+* `tileable` : A and B each trace a full circle in the parameter plane, so the image repeats seamlessly in both directions (wallpaper).
+* `tileable-loop` : like `tileable`, plus C+D trace a circle over the frames (`-f <frames>`), so the animation loops seamlessly (frame N = frame 0).
+* `zoom` : animated fly-through into the (A,B) plane: each frame the rectangle is scaled about its center (zoom factor) and rotated (radians per frame), configured via `-p <zoom>,<rotation>` (default `0.95,0.02`).
 
 
 #### File formats
@@ -87,6 +90,14 @@ Animation: https://github.com/user-attachments/assets/938d0b7e-1d54-40de-93c9-f0
 
 A second animation example is in the pov/ directory.
 
+<br clear="all" />
+
+#### Tileable
+<img src="img/tileable-ABABC.png" width="256" height="256" align="right" />
+
+`lyapunov -W 256 -H 256 -s ABABC -t tileable -o tileable.ppm`
+
+This image tiles seamlessly in both directions (wallpaper): the left edge continues at the right edge and vice versa, the same for top and bottom.
 
 <br clear="all" />
 
