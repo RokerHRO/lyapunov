@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -438,6 +439,19 @@ int main(int argc, char** argv)
 		}
 	}
 	
+	if(seq.empty())
+	{
+		fprintf(stderr, "Sequence must not be empty.\n");
+		return 2;
+	}
+
+	const auto illegal = std::find_if(seq.begin(), seq.end(), [](char ch) { return ch < 'A' || ch > 'E'; });
+	if (illegal != seq.end())
+	{
+		fprintf(stderr, "Sequence \"%s\" contains illegal character '%c' (only 'A'..'E' are allowed).\n", seq.c_str(), *illegal);
+		return 2;
+	}
+
 	if(!center.empty())
 	{
 		double cx=0.0, cy=0.0, dx=0.0;

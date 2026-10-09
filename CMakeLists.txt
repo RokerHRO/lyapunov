@@ -1,13 +1,15 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.20)
 
 project(lyapunov LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(CMAKE_CXX_FLAGS "-O0 -ggdb -fopenmp")
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -ggdb -fopenmp")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -ggdb -fopenmp")
+include(GNUInstallDirs)
+find_package(OpenMP REQUIRED)
+
+add_compile_options(-Wall -Wextra)
+set(CMAKE_CXX_FLAGS_DEBUG "-ggdb")
 
 if(WIN32 AND NOT MSVC)
     # Force static linking of standard libraries
@@ -20,11 +22,20 @@ endif()
 
 add_executable(lyapunov lyapunov.cc
         fractal_type.cc
+        lissajous.cc
         string_case.hh)
+target_link_libraries(lyapunov PRIVATE OpenMP::OpenMP_CXX)
+# FindOpenMP (CMake >= 4) fails to detect gomp on MinGW GCC: the verbose
+# "collect2.exe" link line is not recognized, so link the runtime explicitly.
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_link_libraries(lyapunov PRIVATE gomp)
+endif()
 
 add_executable(gen-ab-sequences gen-ab-sequences.cc)
 
 add_executable(gen_zoom gen_zoom.cc)
 
-install(TARGETS lyapunov
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+add_executable(lissa_overview lissajous.cc lissa_overview.cc)
+
+install(TARGETS lyapunov gen_zoom gen-ab-sequences lissa_overview
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
