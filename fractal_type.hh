@@ -44,7 +44,7 @@ public:
 
 	void per_image(double values[5], unsigned frame) const override
 	{
-		values[2] = c.min + (c.max-c.min)/c.size*(frame+0.5);
+		values[2] = (c.size > 0) ? c.min + (c.max-c.min)/c.size*(frame+0.5) : c.min;
 		values[3] = d;
 		values[4] = e;
 	}
@@ -129,5 +129,41 @@ private:
 	const std::vector<SinCos> sc_line;
 	const std::vector<SinCos> sc_column;
 	const double radius_de;
+};
+
+
+class Tileable : public SimpleFractalType
+{
+public:
+	Tileable(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e)
+	: SimpleFractalType(_a, _b, _c, _d, _e)
+	, center_a((a.max+a.min)/2), radius_a((a.max-a.min)/2)
+	, center_b((b.max+b.min)/2), radius_b((b.max-b.min)/2)
+	, sin_line{ calculate_sin_line()}, cos_column{ calculate_cos_column()}
+	{}
+
+	void per_line (double values[5], unsigned frame, unsigned line) const override;
+	void per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const override;
+	[[nodiscard]] const char* name() const override { return "tileable"; }
+
+private:
+	[[nodiscard]] std::vector<double> calculate_sin_line() const;
+	[[nodiscard]] std::vector<double> calculate_cos_column() const;
+
+	const double center_a, radius_a, center_b, radius_b;
+	const std::vector<double> sin_line;
+	const std::vector<double> cos_column;
+};
+
+
+class TileableLoop : public Tileable
+{
+public:
+	TileableLoop(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e)
+	: Tileable(_a, _b, _c, _d, _e)
+	{}
+
+	void per_image(double values[5], unsigned frame) const override;
+	[[nodiscard]] const char* name() const override { return "tileable-loop"; }
 };
 #endif // FRACTAL_TYPE_HH

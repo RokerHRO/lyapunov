@@ -48,7 +48,7 @@ void Circle::per_image(double values[5], unsigned frame) const
 
 void Sphere::per_image(double values[5], unsigned frame) const
 {
-	const double phi = frame * 2*M_PI / c.size;
+	const double phi = (c.size > 0) ? frame * 2*M_PI / c.size : 0.0;
 	values[3] = d - radius_de * cos(phi);
 	values[4] = e + radius_de * sin(phi);
 }
@@ -92,4 +92,49 @@ std::vector<SinCos> Sphere::calculate_column_vector() const
 		result.emplace_back(ss,cc);
 	}
 	return result;
+}
+
+void Tileable::per_line(double values[5], unsigned frame, unsigned line) const
+{
+	values[0] = center_a + radius_a * sin_line.at(line);
+}
+
+void Tileable::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
+{
+	values[1] = center_b + radius_b * cos_column.at(column);
+}
+
+std::vector<double> Tileable::calculate_sin_line() const
+{
+	std::vector<double> result;
+	result.reserve(a.size);
+	for (unsigned i = 0; i < a.size; ++i)
+		result.push_back(sin(i*(2*M_PI)/a.size));
+	return result;
+}
+
+std::vector<double> Tileable::calculate_cos_column() const
+{
+	std::vector<double> result;
+	result.reserve(b.size);
+	for (unsigned i = 0; i < b.size; ++i)
+		result.push_back(cos(i*(2*M_PI)/b.size));
+	return result;
+}
+
+void TileableLoop::per_image(double values[5], unsigned frame) const
+{
+	if (c.size==0)
+	{
+		values[2] = c.min;
+		values[3] = d;
+		values[4] = e;
+	}else{
+		const double cm = (c.min + c.max)/2;
+		const double r = abs(c.max - c.min);
+		const double phi = frame * 2*M_PI / c.size;
+		values[2] = cm - r*cos(phi);
+		values[3] = d + r*sin(phi);
+		values[4] = e;
+	}
 }
