@@ -173,12 +173,12 @@ void Zoom::per_pixel(double values[5], unsigned frame, unsigned line, unsigned c
 
 void Wavy::per_line(double values[5], unsigned frame, unsigned line) const
 {
-	values[0] = a.min + (a.max-a.min)/a.size*(line+0.5);
+
 }
 
 void Wavy::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
 {
-	values[0] += amp_a * sin(k_a * column - phase_a);
+	values[0] = a.min + (a.max-a.min)/a.size*(line+0.5)   + amp_a * sin(k_a * column - phase_a);
 	values[1] = b.min + (b.max-b.min)/b.size*(column+0.5) + amp_b * sin(k_b * line - phase_b);
 }
 

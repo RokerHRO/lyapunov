@@ -84,7 +84,15 @@ ffmpeg -i ani-ABCD-%03d.ppm -r 25 ani.mp4
 
 `lyapunov -W 1024 -H 512 -t sphere -x 3.2 -X 3.8 -y 3.2 -Y 3.8 -z 3.1 -Z 3.8 -s ABCBBACC -o sphere.ppm`
 
-This image is a "spherical mapping" that can be used e.g. with POV-Ray to render a 3D image.
+This image is a "spherical mapping" that can be used e.g. with POV-Ray to render a 3D image, see <code>pov/</code> subdirectory.
+
+<img src="pov/sphere.jpg" width="256" height="256" />
+
+
+Animation: https://github.com/user-attachments/assets/938d0b7e-1d54-40de-93c9-f0879bf6ffdf
+
+A second animation example is in the pov/ directory.
+
 
 <br clear="all" />
 
