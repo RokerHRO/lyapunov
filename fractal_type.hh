@@ -230,4 +230,40 @@ private:
 	// angular frequency, radians per pixel (A wobbles along columns, B along lines)
 	const double k_a, k_b;
 };
+
+namespace detail
+{
+// 2D Perlin gradient noise, value roughly in [-1, 1]
+struct Perlin
+{
+	explicit Perlin(unsigned seed);
+	[[nodiscard]] double noise(double x, double y) const;
+
+private:
+	int perm[512] = {};
+};
+}
+
+class Noise : public SimpleFractalType
+{
+public:
+	// _params: frequency (noise cells per image axis), amplitude_a, amplitude_b (ratio of image size),
+	//          [seed] (default 3, 0.333, 0.333, 0)
+	// the amplitude grows linearly from 0 to the given value over the frames (single frame: full amplitude)
+	Noise(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e, const std::vector<double>& _params)
+	: SimpleFractalType(_a, _b, _c, _d, _e)
+	, freq(_params.size()>0 ? _params[0] : 3.0)
+	, amp_a((_params.size()>1 ? _params[1] : 0.333) * (a.max-a.min))
+	, amp_b((_params.size()>2 ? _params[2] : 0.333) * (b.max-b.min))
+	, perlin(_params.size()>3 ? (unsigned)_params[3] : 0)
+	{}
+
+	void per_line (double values[5], unsigned frame, unsigned line) const override;
+	void per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const override;
+	[[nodiscard]] const char* name() const override { return "noise"; }
+
+private:
+	const double freq, amp_a, amp_b;
+	const detail::Perlin perlin;
+};
 #endif // FRACTAL_TYPE_HH

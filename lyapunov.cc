@@ -353,6 +353,10 @@ void print_type_help(FILE* f)
 		"\twavy : plain (A,B) plane with a sinusoidal warp: A wobbles along the columns, B along the lines\n"
 		"\t            -p <freq_a>,<amp_a>,<phase_a_deg>[,<freq_b>,<amp_b>,<phase_b_deg>]  (frequency = waves per axis,\n"
 		"\t                 phase in degrees, 360 = one wave; B triple defaults to the A values; default 1,0.02,0)\n"
+		"\tnoise : plain (A,B) plane warped by 2D Perlin noise\n"
+		"\t            -p <frequency>,<amp_a>,<amp_b>[,<seed>]  (frequency = noise cells per axis, amplitude =\n"
+		"\t                 fraction of image size; default 3,0.333,0.333,0)\n"
+		"\t            the amplitude grows linearly from 0 to the given value over the frames (single frame: full amplitude)\n"
 	);
 }
 
@@ -535,6 +539,13 @@ int main(int argc, char** argv)
 				return 2;
 			}
 			fractal_type = new Wavy(dim_a, dim_b, dim_c, valueD, valueE, params); break;
+		case "noise"_case :
+			if (params.size() > 0 && params[0] <= 0.0)
+			{
+				fprintf(stderr, "noise: frequency must be > 0 (got %f).\n", params[0]);
+				return 2;
+			}
+			fractal_type = new Noise(dim_a, dim_b, dim_c, valueD, valueE, params); break;
 		
 		case "help"_case   : [[fallthrough]];
 		case "-h"_case     : [[fallthrough]];
