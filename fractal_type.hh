@@ -266,4 +266,23 @@ private:
 	const double freq, amp_a, amp_b;
 	const detail::Perlin perlin;
 };
+
+class Inversion : public SimpleFractalType
+{
+public:
+	// _params: [center_a, center_b] (default window center),
+	//          [radius] (default half of the A range, i.e. "half the image size")
+	Inversion(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e, const std::vector<double>& _params)
+	: SimpleFractalType(_a, _b, _c, _d, _e)
+	, center_a(_params.size()>0 ? _params[0] : (a.max+a.min)/2)
+	, center_b(_params.size()>1 ? _params[1] : (b.max+b.min)/2)
+	, radius(_params.size()>2 ? _params[2] : (a.max-a.min)/2)
+	{}
+
+	void per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const override;
+	[[nodiscard]] const char* name() const override { return "inversion"; }
+
+private:
+	const double center_a, center_b, radius;
+};
 #endif // FRACTAL_TYPE_HH

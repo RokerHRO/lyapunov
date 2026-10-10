@@ -244,3 +244,20 @@ void Noise::per_pixel(double values[5], unsigned frame, unsigned line, unsigned 
 	values[0] = a.min + (a.max-a.min)/a.size*(line+0.5) + amp_a * t * perlin.noise(x, y);
 	values[1] = b.min + (b.max-b.min)/b.size*(column+0.5) + amp_b * t * perlin.noise(x, y + 52.0);
 }
+
+void Inversion::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
+{
+	// reflection about the inversion circle: distance d and angle theta from the center,
+	// projected to the radius R^2/d (radius R scaled by R/d) at the same angle
+	values[0] = a.min + (a.max-a.min)/a.size*(line+0.5);
+	values[1] = b.min + (b.max-b.min)/b.size*(column+0.5);
+	const double da = values[0] - center_a;
+	const double db = values[1] - center_b;
+	const double d = sqrt(da*da + db*db);
+	if (d > 1e-150) // the center itself is fixed (its image is at infinity)
+	{
+		const double scale = radius*radius / (d*d);
+		values[0] = center_a + scale * da;
+		values[1] = center_b + scale * db;
+	}
+}

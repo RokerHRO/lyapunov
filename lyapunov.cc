@@ -357,6 +357,8 @@ void print_type_help(FILE* f)
 		"\t            -p <frequency>,<amp_a>,<amp_b>[,<seed>]  (frequency = noise cells per axis, amplitude =\n"
 		"\t                 fraction of image size; default 3,0.333,0.333,0)\n"
 		"\t            the amplitude grows linearly from 0 to the given value over the frames (single frame: full amplitude)\n"
+		"\tinversion : plain (A,B) plane, but the points are reflected about a fixed circle (P' = C + R^2*(P-C)/|P-C|^2)\n"
+		"\t            -p [center_a,center_b[,radius]]  (default: window center, half of the A range)\n"
 	);
 }
 
@@ -546,6 +548,7 @@ int main(int argc, char** argv)
 				return 2;
 			}
 			fractal_type = new Noise(dim_a, dim_b, dim_c, valueD, valueE, params); break;
+		case "inversion"_case : fractal_type = new Inversion(dim_a, dim_b, dim_c, valueD, valueE, params); break;
 		
 		case "help"_case   : [[fallthrough]];
 		case "-h"_case     : [[fallthrough]];
