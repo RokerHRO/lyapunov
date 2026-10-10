@@ -138,3 +138,34 @@ void TileableLoop::per_image(double values[5], unsigned frame) const
 		values[4] = e;
 	}
 }
+
+void Zoom::per_image(double values[5], unsigned frame) const
+{
+	if (frame != cache_frame)
+	{
+		const double span = (c.size > 1) ? (double)(c.size - 1) : 1.0;
+		const double t = (double)frame / span;
+		const double s = pow(zoom_total, t);
+		const double theta = rot_total * t;
+		a_x = (a.max-a.min) * s * sin(theta);
+		a_y = (a.max-a.min) * s * cos(theta);
+		b_x = (b.max-b.min) * s * cos(theta);
+		b_y = (b.max-b.min) * s * sin(theta);
+		cache_frame = frame;
+	}
+	values[2] = center_c;
+	values[3] = d;
+	values[4] = e;
+}
+
+void Zoom::per_line(double values[5], unsigned frame, unsigned line) const
+{
+}
+
+void Zoom::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
+{
+	const double x = (column + 0.5) / b.size - 0.5;
+	const double y = (line + 0.5) / a.size - 0.5;
+	values[0] = center_a + a_x * x + a_y * y;
+	values[1] = center_b + b_x * x - b_y * y;
+}

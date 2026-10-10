@@ -348,6 +348,8 @@ void print_type_help(FILE* f)
 		"\tsphere : Sphere in the ABC cube. D=fix, E=fix\n"
 		"\ttileable : A and B each trace a full circle, so the image tiles seamlessly in both directions\n"
 		"\ttileable-loop : tileable, plus C+D circle over the frames, so the animation loops seamlessly\n"
+		"\tzoom : fly-through into the (A,B) plane: over the whole animation the rectangle is scaled about its center and rotated\n"
+		"\t            -p <total_zoom_factor>,<total_rotation_degrees>  (default 0.1,360; 0<f<1: zoom in, f>1: zoom out)\n"
 	);
 }
 
@@ -517,6 +519,7 @@ int main(int argc, char** argv)
 		case "sphere"_case : fractal_type = new Sphere(dim_a, dim_b, dim_c, valueD, valueE, params); break;
 		case "tileable"_case : fractal_type = new Tileable(dim_a, dim_b, dim_c, valueD, valueE); break;
 		case "tileable-loop"_case : fractal_type = new TileableLoop(dim_a, dim_b, dim_c, valueD, valueE); break;
+		case "zoom"_case : fractal_type = new Zoom(dim_a, dim_b, dim_c, valueD, valueE, params); break;
 		
 		case "help"_case   : [[fallthrough]];
 		case "-h"_case     : [[fallthrough]];

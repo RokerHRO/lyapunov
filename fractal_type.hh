@@ -5,6 +5,10 @@
 #include <vector>
 #include <cmath>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 struct Dimension
 {
 	unsigned size;
@@ -165,5 +169,31 @@ public:
 
 	void per_image(double values[5], unsigned frame) const override;
 	[[nodiscard]] const char* name() const override { return "tileable-loop"; }
+};
+
+class Zoom : public SimpleFractalType
+{
+public:
+	// _params: total zoom factor for the whole animation (final frame scale relative to frame 0),
+	//          total rotation in degrees for the whole animation (default 0.1, 360)
+	Zoom(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e, const std::vector<double>& _params)
+	: SimpleFractalType(_a, _b, _c, _d, _e)
+	, center_a((a.max+a.min)/2), center_b((b.max+b.min)/2), center_c((c.max+c.min)/2)
+	, zoom_total(_params.size()>0 ? _params[0] : 0.1)
+	, rot_total(_params.size()>1 ? _params[1] * M_PI/180.0 : 2*M_PI)
+	, cache_frame(~0u), a_x(0.0), a_y(0.0), b_x(0.0), b_y(0.0)
+	{}
+
+	void per_image(double values[5], unsigned frame) const override;
+	void per_line (double values[5], unsigned frame, unsigned line) const override;
+	void per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const override;
+	[[nodiscard]] const char* name() const override { return "zoom"; }
+
+private:
+	const double center_a, center_b, center_c;
+	const double zoom_total, rot_total;
+	// per-frame rotation/scale coefficients, cached by per_image (called once per frame before the parallel pixel loop)
+	mutable unsigned cache_frame;
+	mutable double a_x, a_y, b_x, b_y;
 };
 #endif // FRACTAL_TYPE_HH
