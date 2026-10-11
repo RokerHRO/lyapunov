@@ -343,7 +343,12 @@ void print_type_help(FILE* f)
 {
 	fprintf(f, "Fractal types:\n"
 		"\tplain  : A=y axis, B=x axis, C=z axis (animation or 3rd dimension), D=fix, E=fix\n"
-		"\t6sides : animated cruise through all 6 sides of the ABC cube. D=fix, E=fix\n"
+		"\t6sides : the (A,B) slice at C=cmin tilts about 6 cube edges (6 x 90 degrees,\n"
+		"\t         axes A,C,B,A,C,B), visiting all 6 faces of the ABC cube,\n"
+		"\t         ending back at the start face (window rotated 180 degrees).\n"
+		"\t         -p [rotate]  (1: the window additionally rotates 180 degrees in the\n"
+		"\t         plane over the whole animation, so the animation loops seamlessly;\n"
+		"\t         default 0). D=fix, E=fix\n"
 		"\tcircle : C+D circle\n"
 		"\tsphere : Sphere in the ABC cube. D=fix, E=fix\n"
 		"\ttileable : A and B each trace a full circle, so the image tiles seamlessly in both directions\n"
@@ -523,7 +528,7 @@ int main(int argc, char** argv)
 	switch (case_hash(type))
 	{
 		case "plain"_case  : fractal_type = new SimpleFractalType(dim_a, dim_b, dim_c, valueD, valueE); break;
-		case "6sides"_case : fractal_type = new SixSide(dim_a, dim_b, dim_c, valueD, valueE); break;
+		case "6sides"_case : fractal_type = new SixSide(dim_a, dim_b, dim_c, valueD, valueE, params); break;
 		case "circle"_case : fractal_type = new Circle(dim_a, dim_b, dim_c, valueD, valueE); break;
 		case "sphere"_case : fractal_type = new Sphere(dim_a, dim_b, dim_c, valueD, valueE, params); break;
 		case "tileable"_case : fractal_type = new Tileable(dim_a, dim_b, dim_c, valueD, valueE); break;
