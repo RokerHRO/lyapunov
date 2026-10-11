@@ -46,7 +46,7 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
 
 #### Fractal types
 * `plain`  : just a 2D image or an animation of a linear flight through the 3D cube
-* `6sides` : the (A,B) slice at `C=cmin` tilts about 6 cube edges (6 x 90 degrees, axes A,C,B,A,C,B), visiting all 6 faces of the ABC cube in sequence, ending back at the start face (window rotated 180 degrees). Optional `-p 1`: the window additionally rotates 180 degrees in the plane over the whole animation, so the animation loops seamlessly.
+* `6sides` : tilts the (A,B) slice at `C=cmin` about 6 cube edges (90 degrees each, axes A,C,B,A,C,B), visiting all 6 faces of the ABC cube. `-p [rotate][,ease]`: rotate 1: the window rotates 180 degrees in the plane over the animation (seamless loop); ease 1: smoothstep timing, the window settles at every face.
 * `circle` : values for C and D form a circle: Center is at `(z_min + z_max)/2`, D.  Radius is `abs(z_max-z_min)/2`.
 * `sphere` : a sphere in the ABC cube. D+E can form a circle in animation mode.
 * `tileable` : A and B each trace a full circle in the parameter plane, so the image repeats seamlessly in both directions (wallpaper).
@@ -141,11 +141,15 @@ Every point of the (A,B) plane is reflected about the fixed inversion circle: th
 
 The (A,B) slice at `C=cmin` is hinged at a cube edge and tilted by 90 degrees to the next face, six times in a row (axes A,C,B,A,C,B): the tour visits all 6 faces of the ABC cube — `C=cmin`, `B=bmax`, `A=amax`, `C=cmax`, `B=bmin`, `A=amin` — and ends back at the start face (window rotated 180 degrees). Between two faces the image is a tilted slice through the cube. The animation shows the tour (sequence ABBCAC, values 3.1…3.7).
 
-With `-p 1` (parameter `rotate`, default `0`) the window additionally rotates 180 degrees in the plane over the whole animation, which compensates the 180 degree net rotation of the 6 tilts, so the last frame matches the first one and the animation loops seamlessly. 
+With `-p 1` (parameter `rotate`) the window additionally rotates 180 degrees in the plane over the whole animation, compensating the net rotation of the 6 tilts, so the animation loops seamlessly.
 
 <img src="img/anim-6sides-ABBCAC-rotate.gif" align="right" />
 
 `lyapunov -W 512 -H 512 -i 400 -s ABBCAC -f 240 -t 6sides -p 1 -x 3.1 -X 3.7 -y 3.7 -Y 3.1 -z 3.1 -Z 3.7 -o 6sides-{f}`
+
+The second `-p` parameter `ease` replaces the constant angular speed of each tilt by a smoothstep (3t^2-2t^3), so the window settles at every face and the tour feels fluid:
+
+`lyapunov -W 256 -H 256 -i 400 -s ABBCAC -f 256 -t 6sides -p 1,1 -x 3.1 -X 3.7 -y 3.7 -Y 3.1 -z 3.1 -Z 3.7 -o 6sides-{f}`
 
 <br clear="all" />
 

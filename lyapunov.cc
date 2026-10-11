@@ -48,6 +48,8 @@ bool setF = false;
 int asize = 800;
 int bsize = 800;
 int csize = 0;  // value >0 lets create 3df file instead of PPM
+int gstart = 0; // first frame to render (0-based, of the csize frames)
+int gend = 0;   // one past the last frame to render (0: render all frames)
 
 int nmax = 1000;                /* number of rounds */
 
@@ -260,7 +262,7 @@ void make_ppm()
 	if (csize==0)
 	{
 		make_ppm(0);
-	}else for (int frame_nr=0; frame_nr < csize; ++frame_nr)
+	}else for (int frame_nr=gstart; frame_nr < gend; ++frame_nr)
 	{
 		make_ppm(frame_nr);
 	}
@@ -343,12 +345,13 @@ void print_type_help(FILE* f)
 {
 	fprintf(f, "Fractal types:\n"
 		"\tplain  : A=y axis, B=x axis, C=z axis (animation or 3rd dimension), D=fix, E=fix\n"
-		"\t6sides : the (A,B) slice at C=cmin tilts about 6 cube edges (6 x 90 degrees,\n"
-		"\t         axes A,C,B,A,C,B), visiting all 6 faces of the ABC cube,\n"
-		"\t         ending back at the start face (window rotated 180 degrees).\n"
-		"\t         -p [rotate]  (1: the window additionally rotates 180 degrees in the\n"
-		"\t         plane over the whole animation, so the animation loops seamlessly;\n"
-		"\t         default 0). D=fix, E=fix\n"
+		"\t6sides : tilts the (A,B) slice at C=cmin about 6 cube edges (90 degrees each,\n"
+		"\t         axes A,C,B,A,C,B), visiting all 6 faces of the ABC cube. D=fix, E=fix\n"
+		"\t         -p [rotate][,ease]: rotate 1: the window rotates 180 degrees in the\n"
+		"\t             plane over the animation (seamless loop); ease 1: smoothstep\n"
+		"\t             timing, the window settles at every face; ease 2: quaternion\n"
+		"\t             Catmull-Rom path through the faces (continuous axis blend,\n"
+		"\t             cruise, no pause at the faces) (default 0,0)\n"
 		"\tcircle : C+D circle\n"
 		"\tsphere : Sphere in the ABC cube. D=fix, E=fix\n"
 		"\ttileable : A and B each trace a full circle, so the image tiles seamlessly in both directions\n"
@@ -392,7 +395,7 @@ int main(int argc, char** argv)
 {
 	const auto program_start = std::chrono::system_clock::now();
 	int a;
-	while( (a=getopt(argc, argv, "W:H:f:c:x:y:z:X:Y:Z:s:i:o:O:t:C:D:E:F:p:")) != -1 )
+	while( (a=getopt(argc, argv, "W:H:f:c:x:y:z:X:Y:Z:s:i:o:O:t:C:D:E:F:p:G:")) != -1 )
 	{
 		switch(a)
 		{
@@ -416,6 +419,18 @@ int main(int argc, char** argv)
 			case 'E': valueE = atof(optarg); setE = true; break;
 			case 'F': valueF = atof(optarg); setF = true; break;
 			case 'p': params = parse_params(optarg); break;
+			case 'G':
+			{
+				const char* colon = strchr(optarg, ':');
+				if (colon == nullptr)
+				{
+					fprintf(stderr, "Option -G expects start:end.\n");
+					return 2;
+				}
+				gstart = atoi(optarg);
+				gend = atoi(colon+1);
+				break;
+			}
 			case '?': [[fallthrough]];
 			default:
 				fprintf(stderr, 
@@ -428,6 +443,9 @@ int main(int argc, char** argv)
 					"\t-W width  : width of image in pixel (default: %i)\n"
 					"\t-H height : height of image in pixel (default: %i)\n"
 					"\t-f frames : number of frames or size in in z direction\n"
+					"\t-G start:end : render only the frames in the range [start, end) of the -f frames\n"
+					"\t             (frame numbers and timing use the total -f count, useful for\n"
+					"\t             rendering chunks in parallel; default: all frames)\n"
 					"\t-s seq    : AB or ABC sequence for fractal (default: \"%s\")\n"
 					"\t-i iter   : iterations per pixel (default: %i)\n"
 					"\n"
@@ -457,6 +475,16 @@ int main(int argc, char** argv)
 		}
 	}
 	
+	if(csize > 0)
+	{
+		if(gend == 0) gend = csize; // no -G: render all frames
+		if(gstart < 0 || gend <= gstart || gend > csize)
+		{
+			fprintf(stderr, "Invalid frame range -G %d:%d (total frames: %d).\n", gstart, gend, csize);
+			return 2;
+		}
+	}
+
 	if(seq.empty())
 	{
 		fprintf(stderr, "Sequence must not be empty.\n");
