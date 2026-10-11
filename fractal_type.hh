@@ -2,6 +2,7 @@
 #ifndef FRACTAL_TYPE_HH
 #define FRACTAL_TYPE_HH
 
+#include <array>
 #include <vector>
 #include <cmath>
 
@@ -75,16 +76,29 @@ protected:
 class SixSide : public SimpleFractalType
 {
 public:
+	struct Quat { double w, x, y, z; };
+	struct Vec3 { double x, y, z; };
+
 	// the (A,B) slice at C=cmin tilts about 6 cube edges (90 degrees each,
 	// axes A,C,B,A,C,B), visiting all 6 faces of the ABC cube
 	// and ending back at the start face (window rotated 180 degrees)
-	// _params: [rotate] (1: the window additionally rotates 180 degrees in the
-	//          plane over the whole animation, so the animation loops seamlessly;
-	//          default 0)
+	// _params: [rotate][,ease]
+	//   rotate: 1: the window additionally rotates 180 degrees in the plane
+	//           over the whole animation, so the animation loops seamlessly
+	//   ease:   1: each 90-degree tilt uses smoothstep timing (3t^2-2t^3)
+	//           instead of a constant angular speed, so the window settles
+	//           at every face and the rotation axis switches are not visible
+	//           2: quaternion Catmull-Rom path through the 6 face poses: the
+	//           rotation axis blends continuously between the tilts (cruise,
+	//           no pause at the faces)
+	//   default: 0,0
 	SixSide(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e, const std::vector<double>& _params)
 	: SimpleFractalType(_a, _b, _c, _d, _e)
 	, rotate(_params.size() > 0 && _params[0] != 0.0)
-	{}
+	, ease(_params.size() > 1 ? (int)_params[1] : 0)
+	{
+		if (ease == 2) build_cr_path();
+	}
 
 	void per_image(double values[5], unsigned frame) const override;
 	void per_line (double values[5], unsigned frame, unsigned line) const override;
@@ -93,6 +107,18 @@ public:
 
 private:
 	const bool rotate;
+	const int ease;
+	// ease == 2: periodic Catmull-Rom path through the 7 face poses K0..K6
+	// (K6 = start face rotated 180 degrees); cr_qend[0] is the pose at t=-1
+	// (= K5), cr_qend[1] the pose at t=7 (= K1), with aligned quaternion signs
+	std::array<Quat, 7> cr_qk{};
+	std::array<Vec3, 7> cr_tk{};
+	std::array<Quat, 2> cr_qend{};
+	std::array<Vec3, 2> cr_tend{};
+	// cumulative path length for the constant-speed parameterization
+	std::vector<double> cr_arclen;
+	void build_cr_path();
+	void cr_pose_at(double t, Quat& q, Vec3& tr) const;
 };
 
 
