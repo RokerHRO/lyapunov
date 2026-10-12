@@ -74,9 +74,16 @@ protected:
 
 class SixSide : public SimpleFractalType
 {
-	public:
-	SixSide(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e)
-	: SimpleFractalType(_a, _b, _c, _d, _e), sin_cos{calculate_sincos()}
+public:
+	// the (A,B) slice at C=cmin tilts about 6 cube edges (90 degrees each,
+	// axes A,C,B,A,C,B), visiting all 6 faces of the ABC cube
+	// and ending back at the start face (window rotated 180 degrees)
+	// _params: [rotate] (1: the window additionally rotates 180 degrees in the
+	//          plane over the whole animation, so the animation loops seamlessly;
+	//          default 0)
+	SixSide(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e, const std::vector<double>& _params)
+	: SimpleFractalType(_a, _b, _c, _d, _e)
+	, rotate(_params.size() > 0 && _params[0] != 0.0)
 	{}
 
 	void per_image(double values[5], unsigned frame) const override;
@@ -85,15 +92,7 @@ class SixSide : public SimpleFractalType
 	[[nodiscard]] const char* name() const override { return "six_side"; }
 
 private:
-
-	[[nodiscard]] std::vector<SinCos> calculate_sincos() const;
-	double sin_slide(double phi, const Dimension& dim) const
-	{
-		const double ds = dim.max - dim.min;
-		return dim.max - ds*std::cos(phi);
-	}
-
-	const std::vector<SinCos> sin_cos;
+	const bool rotate;
 };
 
 

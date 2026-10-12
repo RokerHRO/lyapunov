@@ -3,30 +3,60 @@
 #include <math.h>
 #include <algorithm>
 
-inline void SixSide::per_image(double values[5], unsigned frame) const
+void SixSide::per_image(double values[5], unsigned frame) const
 {
+	values[3] = d;
+	values[4] = e;
 }
 
-inline void SixSide::per_line(double values[5], unsigned frame, unsigned line) const
+void SixSide::per_line(double values[5], unsigned frame, unsigned line) const
 {
+	// A depends on line and column, see per_pixel
 }
 
-inline void SixSide::per_pixel(double values[5], unsigned frame, unsigned line, unsigned row) const
+void SixSide::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
 {
-}
+	double u = (double)(column+0.5) / b.size;
+	double v = (double)(line+0.5) / a.size;
+	const double t = (c.size > 1) ? 6.0 * (frame+0.5) / c.size : 0.0;
+	const unsigned seg = (unsigned)std::min(t, 5.9999999);
+	const double theta = (t - seg) * M_PI/2.0;
+	const double s = std::sin(theta), co = std::cos(theta);
 
-std::vector<SinCos> SixSide::calculate_sincos() const
-{
-	std::vector<SinCos> result;
-	result.reserve(c.size);
-	for (unsigned i = 0; i < c.size; ++i)
+	if (rotate && c.size > 1)
 	{
-		const double phi = i*(3*M_PI)/c.size;
-		const double ss = sin(phi);
-		const double cc = cos(phi);
-		result.emplace_back(fabs(ss),fabs(cc));
+		// additional in-plane rotation of the window, 0..180 degrees over
+		// the whole animation, so that the end pose equals the start pose
+		const double psi = (frame + 0.5) * M_PI / c.size;
+		const double ps = std::sin(psi), pc = std::cos(psi);
+		const double du = u - 0.5, dv = v - 0.5;
+		u = du*pc - dv*ps + 0.5;
+		v = du*ps + dv*pc + 0.5;
 	}
-	return result;
+
+	// 6 segments of 90 degrees each, hinged at a cube edge; normalized cube
+	// coordinates (A01,B01,C01) in [0,1]^3, material window coordinates
+	// u = column ratio, v = line ratio
+	double A01, B01, C01;
+	switch (seg)
+	{
+	case 0:  // face C=cmin -> B=bmax, hinged at the (B=bmax,C=cmin) edge, axis A
+		A01 = v;              B01 = 1-(1-u)*co;   C01 = (1-u)*s;         break;
+	case 1:  // face B=bmax -> A=amax, hinged at the (A=amax,B=bmax) edge, axis C
+		A01 = 1-(1-v)*co;     B01 = 1-(1-v)*s;    C01 = 1-u;             break;
+	case 2:  // face A=amax -> C=cmax, hinged at the (A=amax,C=cmax) edge, axis B
+		A01 = 1-u*s;          B01 = v;            C01 = 1-u*co;          break;
+	case 3:  // face C=cmax -> B=bmin, hinged at the (B=bmin,C=cmax) edge, axis A
+		A01 = 1-u;            B01 = v*co;         C01 = 1-v*s;           break;
+	case 4:  // face B=bmin -> A=amin, hinged at the (A=amin,B=bmin) edge, axis C
+		A01 = (1-u)*co;       B01 = (1-u)*s;      C01 = 1-v;             break;
+	default: // face A=amin -> C=cmin (start face, window rotated 180 degrees), hinged at the (A=amin,C=cmin) edge, axis B
+		A01 = (1-v)*s;        B01 = 1-u;          C01 = (1-v)*co;        break;
+	}
+
+	values[0] = a.min + A01 * (a.max-a.min);
+	values[1] = b.min + B01 * (b.max-b.min);
+	values[2] = c.min + C01 * (c.max-c.min);
 }
 
 void Circle::per_image(double values[5], unsigned frame) const
@@ -173,12 +203,12 @@ void Zoom::per_pixel(double values[5], unsigned frame, unsigned line, unsigned c
 
 void Wavy::per_line(double values[5], unsigned frame, unsigned line) const
 {
-	values[0] = a.min + (a.max-a.min)/a.size*(line+0.5);
+
 }
 
 void Wavy::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
 {
-	values[0] += amp_a * sin(k_a * column - phase_a);
+	values[0] = a.min + (a.max-a.min)/a.size*(line+0.5)   + amp_a * sin(k_a * column - phase_a);
 	values[1] = b.min + (b.max-b.min)/b.size*(column+0.5) + amp_b * sin(k_b * line - phase_b);
 }
 
@@ -261,3 +291,5 @@ void Inversion::per_pixel(double values[5], unsigned frame, unsigned line, unsig
 		values[1] = center_b + scale * db;
 	}
 }
+
+

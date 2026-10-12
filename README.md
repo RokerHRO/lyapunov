@@ -46,7 +46,7 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
 
 #### Fractal types
 * `plain`  : just a 2D image or an animation of a linear flight through the 3D cube
-* `6sides` : animated cruise through all 6 sides of the ABC cube.
+* `6sides` : the (A,B) slice at `C=cmin` tilts about 6 cube edges (6 x 90 degrees, axes A,C,B,A,C,B), visiting all 6 faces of the ABC cube in sequence, ending back at the start face (window rotated 180 degrees). Optional `-p 1`: the window additionally rotates 180 degrees in the plane over the whole animation, so the animation loops seamlessly.
 * `circle` : values for C and D form a circle: Center is at `(z_min + z_max)/2`, D.  Radius is `abs(z_max-z_min)/2`.
 * `sphere` : a sphere in the ABC cube. D+E can form a circle in animation mode.
 * `tileable` : A and B each trace a full circle in the parameter plane, so the image repeats seamlessly in both directions (wallpaper).
@@ -123,6 +123,21 @@ The (A,B) plane warped by 2D Perlin noise, configured via `-p <frequency>,<amp_a
 `lyapunov -W 512 -H 512 -i 400 -s ABBABA -t inversion -p 3.2,3.8 -o inversion.ppm`
 
 Every point of the (A,B) plane is reflected about the fixed inversion circle: the distance `d` and the angle from the circle center are computed, then the point is projected to the radius `R²/d` at the same angle (`P' = C + R²·(P−C)/|P−C|²`). Configured via `-p [center_a,center_b[,radius]]` (default: window center, radius half of the A range, i.e. half the image size).
+
+<br clear="all" />
+
+#### SixSides
+`lyapunov -W 512 -H 512 -i 400 -s ABBABA -f 240 -t 6sides -x 3.1 -X 3.7 -y 3.7 -Y 3.1 -z 3.1 -Z 3.7 -o 6sides-{f}`
+
+<img src="img/anim-6sides-ABBCAC.gif" align="right" />
+
+The (A,B) slice at `C=cmin` is hinged at a cube edge and tilted by 90 degrees to the next face, six times in a row (axes A,C,B,A,C,B): the tour visits all 6 faces of the ABC cube — `C=cmin`, `B=bmax`, `A=amax`, `C=cmax`, `B=bmin`, `A=amin` — and ends back at the start face (window rotated 180 degrees). Between two faces the image is a tilted slice through the cube. The animation shows the tour (sequence ABBCAC, values 3.1…3.7).
+
+With `-p 1` (parameter `rotate`, default `0`) the window additionally rotates 180 degrees in the plane over the whole animation, which compensates the 180 degree net rotation of the 6 tilts, so the last frame matches the first one and the animation loops seamlessly. 
+
+<img src="img/anim-6sides-ABBCAC-rotate.gif" align="right" />
+
+`lyapunov -W 512 -H 512 -i 400 -s ABBCAC -f 240 -t 6sides -p 1 -x 3.1 -X 3.7 -y 3.7 -Y 3.1 -z 3.1 -Z 3.7 -o 6sides-{f}`
 
 <br clear="all" />
 
