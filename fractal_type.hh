@@ -3,6 +3,7 @@
 #define FRACTAL_TYPE_HH
 
 #include <array>
+#include <utility>
 #include <vector>
 #include <cmath>
 
@@ -95,7 +96,7 @@ public:
 	SixSide(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e, const std::vector<double>& _params)
 	: SimpleFractalType(_a, _b, _c, _d, _e)
 	, rotate(_params.size() > 0 && _params[0] != 0.0)
-	, ease(_params.size() > 1 ? (int)_params[1] : 0)
+	, ease(_params.size() > 1 ? _params[1] : 0)
 	{
 		if (ease == 2) build_cr_path();
 	}
@@ -118,7 +119,7 @@ private:
 	// cumulative path length for the constant-speed parameterization
 	std::vector<double> cr_arclen;
 	void build_cr_path();
-	void cr_pose_at(double t, Quat& q, Vec3& tr) const;
+	std::pair<Quat, Vec3> cr_pose_at(double t) const;
 };
 
 
