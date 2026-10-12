@@ -171,20 +171,38 @@ void lyapunov(std::vector<std::vector<PXL>>& img, const int max_iter, const std:
 				x = r*x*(1-x);
 			}
 			double sum_log_deriv = 0;
+			double prod_deriv = 1;
+			bool diverged = false;
 			for (int n = 0; n < max_iter; n++)
 			{
-				double prod_deriv = 1;
+				/* [0,1] is invariant for r in (0,4): once the orbit leaves it, it
+				   runs off to -infinity and lambda -> +infinity (pure blue), so
+				   the remaining iterations can be skipped */
+				if (x < 0.0 || x > 1.0)
+				{
+					diverged = true;
+					break;
+				}
+				double round_deriv = 1;
 				for (unsigned m = 0; m < sequence.length(); m++)
 				{
 					const char ch = sequence[m];
 					const double r = vals[ch-'A']; // ch=='B' ? b : (ch=='A' ? a : c);
-					/* avoid computing too many logarithms. One every round is acceptable. */
-					prod_deriv *= r*(1-2*x); 
+					round_deriv *= r*(1-2*x);
 					x = r*x*(1-x);
 				}
-				sum_log_deriv += log(fabs(prod_deriv));
+				/* accumulate the derivative product over several rounds and take
+				   one logarithm only when it drifts out of a comfortable range
+				   (one per round is what the old code did, one per pixel usually) */
+				prod_deriv *= round_deriv;
+				const double a = fabs(prod_deriv);
+				if (a > 1e100 || a < 1e-100 || n == max_iter-1)
+				{
+					sum_log_deriv += log(a);
+					prod_deriv = 1;
+				}
 			}
-			const double lambda = sum_log_deriv / (nmax*sequence.length());
+			const double lambda = diverged ? 1e30 : sum_log_deriv / (nmax*sequence.length());
 			/*
 			if(x>max_x) max_x = x;
 			if(x<min_x) min_x = x;

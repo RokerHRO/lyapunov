@@ -76,17 +76,17 @@ Vec3 cr_vec3(const Vec3& tm, const Vec3& t0, const Vec3& t1, const Vec3& tp, dou
 }
 
 // the 6 hinge segments: (A01,B01,C01) from window coordinates (u,v) at tilt theta
-void sixside_map(unsigned seg, double theta, double u, double v, double out[3])
+Vec3 sixside_map(unsigned seg, double theta, double u, double v)
 {
 	const double s = std::sin(theta), co = std::cos(theta);
 	switch (seg)
 	{
-	case 0:  out[0] = v;            out[1] = 1-(1-u)*co;  out[2] = (1-u)*s;   break;
-	case 1:  out[0] = 1-(1-v)*co;   out[1] = 1-(1-v)*s;   out[2] = 1-u;       break;
-	case 2:  out[0] = 1-u*s;        out[1] = v;           out[2] = 1-u*co;    break;
-	case 3:  out[0] = 1-u;          out[1] = v*co;        out[2] = 1-v*s;     break;
-	case 4:  out[0] = (1-u)*co;     out[1] = (1-u)*s;     out[2] = 1-v;       break;
-	default: out[0] = (1-v)*s;      out[1] = 1-u;         out[2] = (1-v)*co;  break;
+	case 0:  return {v, 1-(1-u)*co, (1-u)*s};
+	case 1:  return {1-(1-v)*co, 1-(1-v)*s, 1-u};
+	case 2:  return {1-u*s, v, 1-u*co};
+	case 3:  return {1-u, v*co, 1-v*s};
+	case 4:  return {(1-u)*co, (1-u)*s, 1-v};
+	default: return {(1-v)*s, 1-u, (1-v)*co};
 	}
 }
 } // namespace
@@ -98,13 +98,12 @@ void SixSide::build_cr_path()
 		// K0..K5: segment k at tilt 0, K6: segment 5 at tilt 90 degrees
 		const unsigned seg = (k < 6) ? k : 5;
 		const double theta = (k == 6) ? M_PI/2.0 : 0.0;
-		double p0[3], pu[3], pv[3];
-		sixside_map(seg, theta, 0.0, 0.0, p0);
-		sixside_map(seg, theta, 1.0, 0.0, pu);
-		sixside_map(seg, theta, 0.0, 1.0, pv);
-		const Vec3 ru{pu[0]-p0[0], pu[1]-p0[1], pu[2]-p0[2]};
-		const Vec3 rv{pv[0]-p0[0], pv[1]-p0[1], pv[2]-p0[2]};
-		cr_tk[k] = {p0[0], p0[1], p0[2]};
+		const Vec3 p0 = sixside_map(seg, theta, 0.0, 0.0);
+		const Vec3 pu = sixside_map(seg, theta, 1.0, 0.0);
+		const Vec3 pv = sixside_map(seg, theta, 0.0, 1.0);
+		const Vec3 ru{pu.x-p0.x, pu.y-p0.y, pu.z-p0.z};
+		const Vec3 rv{pv.x-p0.x, pv.y-p0.y, pv.z-p0.z};
+		cr_tk[k] = p0;
 		cr_qk[k] = mat2q(ru, rv, cross3(ru, rv));
 	}
 	for (unsigned k = 1; k < 7; ++k)
@@ -121,12 +120,10 @@ void SixSide::build_cr_path()
 	const int m = 6 * 512;
 	cr_arclen.resize(m + 1);
 	cr_arclen[0] = 0.0;
-	Quat q0{}; Vec3 t0{};
-	cr_pose_at(0.0, q0, t0);
+	auto [q0, t0] = cr_pose_at(0.0);
 	for (int i = 1; i <= m; ++i)
 	{
-		Quat q; Vec3 tr;
-		cr_pose_at(6.0 * i / m, q, tr);
+		const auto [q, tr] = cr_pose_at(6.0 * i / m);
 		const double d = std::min(1.0, std::abs(qdot(q0, q)));
 		const double ang = 2.0 * std::acos(d);
 		const double dt = std::sqrt((tr.x-t0.x)*(tr.x-t0.x) + (tr.y-t0.y)*(tr.y-t0.y) + (tr.z-t0.z)*(tr.z-t0.z));
@@ -136,16 +133,16 @@ void SixSide::build_cr_path()
 	}
 }
 
-void SixSide::cr_pose_at(double t, Quat& q, Vec3& tr) const
+std::pair<Quat, Vec3> SixSide::cr_pose_at(double t) const
 {
-	const unsigned seg = (unsigned)std::min(t, 5.9999999);
+	const unsigned seg = std::min(t, 5.9999999);
 	const double tau = t - seg;
 	const Quat qm = (seg == 0) ? cr_qend[0] : cr_qk[seg-1];
 	const Quat qp = (seg == 5) ? cr_qend[1] : cr_qk[seg+2];
 	const Vec3 tm = (seg == 0) ? cr_tend[0] : cr_tk[seg-1];
 	const Vec3 tp = (seg == 5) ? cr_tend[1] : cr_tk[seg+2];
-	q = cr_quat(qm, cr_qk[seg], cr_qk[seg+1], qp, tau);
-	tr = cr_vec3(tm, cr_tk[seg], cr_tk[seg+1], tp, tau);
+	return {cr_quat(qm, cr_qk[seg], cr_qk[seg+1], qp, tau),
+	        cr_vec3(tm, cr_tk[seg], cr_tk[seg+1], tp, tau)};
 }
 
 void SixSide::per_image(double values[5], unsigned frame) const
@@ -161,10 +158,10 @@ void SixSide::per_line(double values[5], unsigned frame, unsigned line) const
 
 void SixSide::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
 {
-	double u = (double)(column+0.5) / b.size;
-	double v = (double)(line+0.5) / a.size;
+	double u = (column+0.5) / b.size;
+	double v = (line+0.5) / a.size;
 	const double t = (c.size > 1) ? 6.0 * (frame+0.5) / c.size : 0.0;
-	const unsigned seg = (unsigned)std::min(t, 5.9999999);
+	const unsigned seg = std::min(t, 5.9999999);
 	const double tau = t - seg;
 
 	if (rotate && c.size > 1)
@@ -186,7 +183,7 @@ void SixSide::per_pixel(double values[5], unsigned frame, unsigned line, unsigne
 		// quaternion Catmull-Rom path through the 7 face poses (periodic,
 		// so the path is also smooth across the animation loop point),
 		// reparameterized by arc length for a constant cruise speed
-		const int n = (int)cr_arclen.size() - 1;
+		const int n = cr_arclen.size() - 1;
 		const double target = (t / 6.0) * cr_arclen[n];
 		int lo = 0, hi = n;
 		while (hi - lo > 1)
@@ -197,8 +194,7 @@ void SixSide::per_pixel(double values[5], unsigned frame, unsigned line, unsigne
 		const double span = cr_arclen[hi] - cr_arclen[lo];
 		const double frac = (span > 0.0) ? (target - cr_arclen[lo]) / span : 0.0;
 		const double path_t = (lo + frac) * 6.0 / n;
-		Quat q; Vec3 tr;
-		cr_pose_at(path_t, q, tr);
+		const auto [q, tr] = cr_pose_at(path_t);
 		const Vec3 p = qrot(q, {u, v, 0.0});
 		A01 = p.x + tr.x;  B01 = p.y + tr.y;  C01 = p.z + tr.z;
 	}
