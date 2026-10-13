@@ -1,12 +1,16 @@
 #include "fractal_type.hh"
 
-#include <math.h>
+#include <cmath>
 #include <algorithm>
 
 namespace
 {
-using Quat = SixSide::Quat;
-using Vec3 = SixSide::Vec3;
+// next 24-bit uniform in [0,1) from the LCG state (the state is advanced)
+double next01(unsigned& s)
+{
+	s = s*1103515245u + 12345u;
+	return (s >> 8) / 16777216.0;
+}
 
 Quat qscale(Quat a, double s) { return {a.w*s, a.x*s, a.y*s, a.z*s}; }
 Quat qadd(Quat a, Quat b) { return {a.w+b.w, a.x+b.x, a.y+b.y, a.z+b.z}; }
@@ -91,7 +95,14 @@ Vec3 sixside_map(unsigned seg, double theta, double u, double v)
 }
 } // namespace
 
-void SixSide::build_cr_path()
+SixSidePath::SixSidePath(const std::vector<double>& params)
+: rotate(params.size() > 0 && params[0] != 0.0)
+, ease(params.size() > 1 ? int(params[1]) : 0)
+{
+	if (ease == 2) build_catmull_rom_path();
+}
+
+void SixSidePath::build_catmull_rom_path()
 {
 	for (unsigned k = 0; k < 7; ++k)
 	{
@@ -133,7 +144,7 @@ void SixSide::build_cr_path()
 	}
 }
 
-std::pair<Quat, Vec3> SixSide::cr_pose_at(double t) const
+std::pair<Quat, Vec3> SixSidePath::cr_pose_at(double t) const
 {
 	const unsigned seg = std::min(t, 5.9999999);
 	const double tau = t - seg;
@@ -145,84 +156,168 @@ std::pair<Quat, Vec3> SixSide::cr_pose_at(double t) const
 	        cr_vec3(tm, cr_tk[seg], cr_tk[seg+1], tp, tau)};
 }
 
-void SixSide::per_image(double values[5], unsigned frame) const
+WindowPose SixSidePath::poseAt(unsigned frame, unsigned frameCount) const
 {
+	const double t = (frameCount > 1) ? 6.0 * (frame + 0.5) / frameCount : 0.0;
+
+	WindowPose pose = (ease == 2) ? pose_catmull_rom_spline(t) : pose_hinge(t);
+
+	if (rotate && frameCount > 1)
+	{
+		// additional in-plane rotation of the window, 0..180 degrees over
+		// the whole animation, so that the end pose equals the start pose
+		const double psi = (frame + 0.5) * M_PI / frameCount;
+		const double ps = std::sin(psi), pc = std::cos(psi);
+		// the window rotates about its center, re-expressed as the affine
+		// map corner' + u_axis'*u + v_axis'*v
+		const Vec3 ru{pc*pose.u_axis.x + ps*pose.v_axis.x, pc*pose.u_axis.y + ps*pose.v_axis.y, pc*pose.u_axis.z + ps*pose.v_axis.z};
+		const Vec3 rv{pc*pose.v_axis.x - ps*pose.u_axis.x, pc*pose.v_axis.y - ps*pose.u_axis.y, pc*pose.v_axis.z - ps*pose.u_axis.z};
+		pose.corner = {pose.corner.x + 0.5*(pose.u_axis.x+pose.v_axis.x) - 0.5*(ru.x+rv.x),
+		               pose.corner.y + 0.5*(pose.u_axis.y+pose.v_axis.y) - 0.5*(ru.y+rv.y),
+		               pose.corner.z + 0.5*(pose.u_axis.z+pose.v_axis.z) - 0.5*(ru.z+rv.z)};
+		pose.u_axis = ru;
+		pose.v_axis = rv;
+	}
+
+	return pose;
+}
+
+// classic flight: the window tilts 90 degrees about a cube edge per
+// segment, constant angular speed (ease 0) or smoothstep timing (ease 1)
+WindowPose SixSidePath::pose_hinge(double t) const
+{
+	const unsigned seg = std::min(t, 5.9999999);
+	const double tau = t - seg;
+	const double theta = (M_PI/2.0) * (ease ? tau*tau*(3.0 - 2.0*tau) : tau);
+	const Vec3 corner = sixside_map(seg, theta, 0.0, 0.0);
+	const Vec3 pu = sixside_map(seg, theta, 1.0, 0.0);
+	const Vec3 pv = sixside_map(seg, theta, 0.0, 1.0);
+	return {corner,
+	        {pu.x-corner.x, pu.y-corner.y, pu.z-corner.z},
+	        {pv.x-corner.x, pv.y-corner.y, pv.z-corner.z}};
+}
+
+// cruise flight: quaternion Catmull-Rom path through the 7 face poses
+// (periodic, so the path is also smooth across the animation loop point),
+// reparameterized by arc length for a constant cruise speed
+WindowPose SixSidePath::pose_catmull_rom_spline(double t) const
+{
+	const int n = int(cr_arclen.size()) - 1;
+	const double target = (t / 6.0) * cr_arclen[n];
+	int lo = 0, hi = n;
+	while (hi - lo > 1)
+	{
+		const int mid = (lo + hi) / 2;
+		if (cr_arclen[mid] < target) lo = mid; else hi = mid;
+	}
+	const double span = cr_arclen[hi] - cr_arclen[lo];
+	const double frac = (span > 0.0) ? (target - cr_arclen[lo]) / span : 0.0;
+	const double path_t = (lo + frac) * 6.0 / n;
+	const auto [q, tr] = cr_pose_at(path_t);
+	return {tr, qrot(q, {1.0, 0.0, 0.0}), qrot(q, {0.0, 1.0, 0.0})};
+}
+
+void Flight::per_image(double values[5], unsigned frame) const
+{
+	if (frame != pose_frame)
+	{
+		pose = path->poseAt(frame, c.size);
+		pose_frame = frame;
+	}
 	values[3] = d;
 	values[4] = e;
 }
 
-void SixSide::per_line(double values[5], unsigned frame, unsigned line) const
+void Flight::per_line(double values[5], unsigned frame, unsigned line) const
 {
-	// A depends on line and column, see per_pixel
+	// A, B and C all depend on line and column, see per_pixel
 }
 
-void SixSide::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
+void Flight::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
 {
-	double u = (column+0.5) / b.size;
-	double v = (line+0.5) / a.size;
-	const double t = (c.size > 1) ? 6.0 * (frame+0.5) / c.size : 0.0;
-	const unsigned seg = std::min(t, 5.9999999);
-	const double tau = t - seg;
-
-	if (rotate && c.size > 1)
-	{
-		// additional in-plane rotation of the window, 0..180 degrees over
-		// the whole animation, so that the end pose equals the start pose
-		const double psi = (frame + 0.5) * M_PI / c.size;
-		const double ps = std::sin(psi), pc = std::cos(psi);
-		const double du = u - 0.5, dv = v - 0.5;
-		u = du*pc - dv*ps + 0.5;
-		v = du*ps + dv*pc + 0.5;
-	}
-
-	// normalized cube coordinates (A01,B01,C01) in [0,1]^3, material window
-	// coordinates u = column ratio, v = line ratio
-	double A01, B01, C01;
-	if (ease == 2)
-	{
-		// quaternion Catmull-Rom path through the 7 face poses (periodic,
-		// so the path is also smooth across the animation loop point),
-		// reparameterized by arc length for a constant cruise speed
-		const int n = cr_arclen.size() - 1;
-		const double target = (t / 6.0) * cr_arclen[n];
-		int lo = 0, hi = n;
-		while (hi - lo > 1)
-		{
-			const int mid = (lo + hi) / 2;
-			if (cr_arclen[mid] < target) lo = mid; else hi = mid;
-		}
-		const double span = cr_arclen[hi] - cr_arclen[lo];
-		const double frac = (span > 0.0) ? (target - cr_arclen[lo]) / span : 0.0;
-		const double path_t = (lo + frac) * 6.0 / n;
-		const auto [q, tr] = cr_pose_at(path_t);
-		const Vec3 p = qrot(q, {u, v, 0.0});
-		A01 = p.x + tr.x;  B01 = p.y + tr.y;  C01 = p.z + tr.z;
-	}
-	else
-	{
-		const double theta = (M_PI/2.0) * (ease ? tau*tau*(3.0 - 2.0*tau) : tau);
-		const double s = std::sin(theta), co = std::cos(theta);
-		switch (seg)
-		{
-		case 0:  // face C=cmin -> B=bmax, hinged at the (B=bmax,C=cmin) edge, axis A
-			A01 = v;              B01 = 1-(1-u)*co;   C01 = (1-u)*s;         break;
-		case 1:  // face B=bmax -> A=amax, hinged at the (A=amax,B=bmax) edge, axis C
-			A01 = 1-(1-v)*co;     B01 = 1-(1-v)*s;    C01 = 1-u;             break;
-		case 2:  // face A=amax -> C=cmax, hinged at the (A=amax,C=cmax) edge, axis B
-			A01 = 1-u*s;          B01 = v;            C01 = 1-u*co;          break;
-		case 3:  // face C=cmax -> B=bmin, hinged at the (B=bmin,C=cmax) edge, axis A
-			A01 = 1-u;            B01 = v*co;         C01 = 1-v*s;           break;
-		case 4:  // face B=bmin -> A=amin, hinged at the (A=amin,B=bmin) edge, axis C
-			A01 = (1-u)*co;       B01 = (1-u)*s;      C01 = 1-v;             break;
-		default: // face A=amin -> C=cmin (start face, window rotated 180 degrees), hinged at the (A=amin,C=cmin) edge, axis B
-			A01 = (1-v)*s;        B01 = 1-u;          C01 = (1-v)*co;        break;
-		}
-	}
-
+	const double u = (column+0.5) / b.size;
+	const double v = (line+0.5) / a.size;
+	const double A01 = pose.corner.x + u*pose.u_axis.x + v*pose.v_axis.x;
+	const double B01 = pose.corner.y + u*pose.u_axis.y + v*pose.v_axis.y;
+	const double C01 = pose.corner.z + u*pose.u_axis.z + v*pose.v_axis.z;
 	values[0] = a.min + A01 * (a.max-a.min);
 	values[1] = b.min + B01 * (b.max-b.min);
 	values[2] = c.min + C01 * (c.max-c.min);
 }
+
+WanderPath::WanderPath(const std::vector<double>& params)
+: keyframes(params.size() > 0 ? std::max(3u, unsigned(params[0])) : 6u)
+, scale(params.size() > 2 ? params[2] : 1.0)
+{
+	unsigned s = params.size() > 1 ? unsigned(params[1]) : 0u;
+
+	kf_center.resize(keyframes);
+	kf_rot.resize(keyframes);
+	for (unsigned k = 0; k < keyframes; ++k)
+	{
+		kf_center[k] = {next01(s), next01(s), next01(s)};
+		// uniform random rotation as a normalized random quaternion
+		const Quat q{2.0*next01(s)-1.0, 2.0*next01(s)-1.0, 2.0*next01(s)-1.0, 2.0*next01(s)-1.0};
+		kf_rot[k] = (qdot(q, q) < 1e-12) ? Quat{1.0, 0.0, 0.0, 0.0} : qnormu(q);
+	}
+	for (unsigned k = 1; k < keyframes; ++k)
+		if (qdot(kf_rot[k-1], kf_rot[k]) < 0.0)
+			kf_rot[k] = qscale(kf_rot[k], -1.0);
+
+	// cumulative path length over the whole tour, used to reparameterize
+	// the path by constant speed (same as SixSidePath)
+	const unsigned m = keyframes * 512;
+	arclen.resize(m + 1);
+	auto [q0, c0] = spline_pose(0.0);
+	for (unsigned i = 1; i <= m; ++i)
+	{
+		const auto [q, c] = spline_pose(double(keyframes) * i / m);
+		const double d = std::min(1.0, std::abs(qdot(q0, q)));
+		const double ang = 2.0 * std::acos(d);
+		const double dt = std::sqrt((c.x-c0.x)*(c.x-c0.x) + (c.y-c0.y)*(c.y-c0.y) + (c.z-c0.z)*(c.z-c0.z));
+		arclen[i] = arclen[i-1] + std::sqrt(ang*ang + dt*dt);
+		q0 = q;
+		c0 = c;
+	}
+}
+
+std::pair<Quat, Vec3> WanderPath::spline_pose(double t) const
+{
+	const unsigned n = keyframes;
+	const unsigned seg = unsigned(std::min(t, double(n) - 1e-7));
+	const double tau = t - seg;
+	const Quat q = cr_quat(kf_rot[(seg + n - 1) % n], kf_rot[seg], kf_rot[(seg + 1) % n], kf_rot[(seg + 2) % n], tau);
+	const Vec3 c = cr_vec3(kf_center[(seg + n - 1) % n], kf_center[seg], kf_center[(seg + 1) % n], kf_center[(seg + 2) % n], tau);
+	return {q, c};
+}
+
+WindowPose WanderPath::poseAt(unsigned frame, unsigned frameCount) const
+{
+	const double t = (frameCount > 1) ? double(keyframes) * (frame + 0.5) / frameCount : 0.0;
+
+	// arc-length reparameterization for a constant cruise speed
+	const int m = int(arclen.size()) - 1;
+	const double target = (t / double(keyframes)) * arclen[m];
+	int lo = 0, hi = m;
+	while (hi - lo > 1)
+	{
+		const int mid = (lo + hi) / 2;
+		if (arclen[mid] < target) lo = mid; else hi = mid;
+	}
+	const double span = arclen[hi] - arclen[lo];
+	const double frac = (span > 0.0) ? (target - arclen[lo]) / span : 0.0;
+	const double path_t = (lo + frac) * double(keyframes) / m;
+
+	const auto [q, center] = spline_pose(path_t);
+	const Vec3 u_axis = qrot(q, {scale, 0.0, 0.0});
+	const Vec3 v_axis = qrot(q, {0.0, scale, 0.0});
+	// the keyframes store the window center, derive the corner from it
+	const Vec3 corner{center.x - 0.5*(u_axis.x+v_axis.x),
+	                  center.y - 0.5*(u_axis.y+v_axis.y),
+	                  center.z - 0.5*(u_axis.z+v_axis.z)};
+	return {corner, u_axis, v_axis};
+}
+
 
 void Circle::per_image(double values[5], unsigned frame) const
 {
@@ -339,8 +434,8 @@ void Zoom::per_image(double values[5], unsigned frame) const
 {
 	if (frame != cache_frame)
 	{
-		const double span = (c.size > 1) ? (double)(c.size - 1) : 1.0;
-		const double t = (double)frame / span;
+		const double span = (c.size > 1) ? double(c.size - 1) : 1.0;
+		const double t = double(frame) / span;
 		const double s = pow(zoom_total, t);
 		const double theta = rot_total * t;
 		a_x = (a.max-a.min) * s * sin(theta);
@@ -386,7 +481,7 @@ detail::Perlin::Perlin(unsigned seed)
 	for (int i = 255; i > 0; --i)
 	{
 		s = s*1103515245u + 12345u;
-		const int j = (int)((s >> 16) % (unsigned)(i+1));
+		const int j = int((s >> 16) % unsigned(i+1));
 		std::swap(p[i], p[j]);
 	}
 	for (int i = 0; i < 512; ++i)
@@ -395,8 +490,8 @@ detail::Perlin::Perlin(unsigned seed)
 
 double detail::Perlin::noise(double x, double y) const
 {
-	const int xi = (int)floor(x) & 255;
-	const int yi = (int)floor(y) & 255;
+	const int xi = int(floor(x)) & 255;
+	const int yi = int(floor(y)) & 255;
 	const double xf = x - floor(x);
 	const double yf = y - floor(y);
 	const double u = xf*xf*xf*(xf*(xf*6-15)+10);
@@ -435,7 +530,7 @@ void Noise::per_pixel(double values[5], unsigned frame, unsigned line, unsigned 
 {
 	const double x = (column + 0.5) / b.size * freq;
 	const double y = (line + 0.5) / a.size * freq;
-	const double t = (c.size > 1) ? (double)frame / (c.size - 1) : 1.0;
+	const double t = (c.size > 1) ? double(frame) / (c.size - 1) : 1.0;
 	values[0] = a.min + (a.max-a.min)/a.size*(line+0.5) + amp_a * t * perlin.noise(x, y);
 	values[1] = b.min + (b.max-b.min)/b.size*(column+0.5) + amp_b * t * perlin.noise(x, y + 52.0);
 }

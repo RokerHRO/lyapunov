@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
+#include <memory>
 #include <cmath>
 #include <cstring>
 #include <string>
@@ -18,7 +19,7 @@
 #include <fcntl.h>
 #endif
 
-#define CLAMP(x) (((x) > 255) ? (unsigned char)255u : ((x) < 0) ? (unsigned char)0u : (unsigned char)(x))
+#define CLAMP(x) static_cast<uint8_t>(((x) > 255) ? (255u) : ((x) < 0) ? (0u) : (x))
 
 //int seq_length = 12;
 //int seq[12] = {1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0};
@@ -129,15 +130,10 @@ uint8_t lambda2pxl<uint8_t>(const double lambda)
 
 // extension: 3rd dimension: value c is fixed, selected by 'C' in sequence string
 template<class PXL>
-void lyapunov(std::vector<std::vector<PXL>>& img, const int max_iter, const std::string& sequence, const FractalType& ftype, const unsigned frame)
+void lyapunov(std::vector<PXL>& img, const int max_iter, const std::string& sequence, const FractalType& ftype, const unsigned frame)
 {
-	double min_x = +HUGE_VAL;
-	double max_x = -HUGE_VAL;
-	double min_lambda = +HUGE_VAL;
-	double max_lambda = -HUGE_VAL;
-
-	const int height = img.size();
-	const int width  = img[0].size();
+	const int height = asize;
+	const int width  = bsize;
 
 	constexpr unsigned THREADS = 32;
 	double tvals[THREADS][5] = { };
@@ -204,13 +200,7 @@ void lyapunov(std::vector<std::vector<PXL>>& img, const int max_iter, const std:
 				}
 			}
 			const double lambda = diverged ? 1e30 : sum_log_deriv / (nmax*sequence.length());
-			/*
-			if(x>max_x) max_x = x;
-			if(x<min_x) min_x = x;
-			if(lambda>max_lambda) max_lambda = lambda;
-			if(lambda<min_lambda) min_lambda = lambda;
-			*/
-			img[ai][bi] = lambda2pxl<PXL>(lambda);
+			img[size_t(ai) * width + bi] = lambda2pxl<PXL>(lambda);
 		}
 	}
 	
@@ -239,12 +229,8 @@ void make_ppm(const unsigned frame_nr)
 	}
 
 	// RGB image:
-	std::vector<std::vector<RGB>> img;
-	img.resize(asize);
-	for(auto& row : img)
-	{
-		row.resize(bsize);
-	}
+	std::vector<RGB> img;
+	img.resize(size_t(asize) * bsize);
 
 	// PPM header
 	fprintf( of,"P6\n");
@@ -264,9 +250,9 @@ void make_ppm(const unsigned frame_nr)
 		bsize, asize
 		);
 	
-	for(const auto& row : img)
+	for (int ai = 0; ai < asize; ++ai)
 	{
-		fwrite(row.data(), sizeof(RGB), row.size(), of);
+		fwrite(&img[size_t(ai) * bsize], sizeof(RGB), bsize, of);
 	}
 	fflush(of);
 
@@ -288,12 +274,11 @@ void make_ppm()
 }
 
 inline
-uint8_t get(const std::vector<std::vector<std::vector<uint8_t>>>& img, const int x, const int y, const int z)
+uint8_t get(const std::vector<std::vector<uint8_t>>& img, const int x, const int y, const int z)
 {
-//	if( unsigned(z)>=img.size() ) return 0;
-	if( unsigned(y)>=img[z].size() ) return 0;
-	if( unsigned(x)>=img[z][y].size() ) return 0;
-	return img[z][y][x];
+	if( unsigned(y) >= unsigned(asize) ) return 0;
+	if( unsigned(x) >= unsigned(bsize) ) return 0;
+	return img[z][size_t(y) * bsize + x];
 }
 
 
@@ -319,15 +304,8 @@ void make_3df()
 	fflush(of);
 	
 	// 3 images:
-	std::vector<std::vector<std::vector<uint8_t>>> img;
-	img.resize(3);
-	img[0].resize(asize);
-	for(auto& row : img[0])
-	{
-		row.resize(bsize);
-	}
-	
-	img[2] = img[1] = img[0];
+	std::vector<std::vector<uint8_t>> img;
+	img.resize(3, std::vector<uint8_t>(size_t(asize) * bsize));
 	
 	for(int ci=0; ci<csize; ++ci)
 	{
@@ -344,7 +322,7 @@ void make_3df()
 			for(int dy=-1; dy<=+1; ++dy)
 			for(int dx=-1; dx<=+1; ++dx)
 			{
-				u += get(img, x+dx, y+dy, z );
+				u += get(img, x+dx, y+dy, z);
 			}
 			const uint8_t u8 = u/27;
 			fputc(u8, of);
@@ -371,6 +349,10 @@ void print_type_help(FILE* f)
 		"\t             timing, the window settles at every face; ease 2: quaternion\n"
 		"\t             Catmull-Rom path through the faces (continuous axis blend,\n"
 		"\t             cruise, no pause at the faces) (default 0,0)\n"
+		"\twander : the window center wanders along a closed Catmull-Rom spline through N random\n"
+		"\t         keyframes (random orientations, constant cruise speed), seamless loop\n"
+		"\t         -p [keyframes][,seed][,scale]  (default 6,0,1.0; keyframes >= 3, scale = window\n"
+		"\t             size relative to a cube face, < 1 = zoom)\n"
 		"\tcircle : C+D circle\n"
 		"\tsphere : Sphere in the ABC cube. D=fix, E=fix\n"
 		"\ttileable : A and B each trace a full circle, so the image tiles seamlessly in both directions\n"
@@ -575,7 +557,8 @@ int main(int argc, char** argv)
 	switch (case_hash(type))
 	{
 		case "plain"_case  : fractal_type = new SimpleFractalType(dim_a, dim_b, dim_c, valueD, valueE); break;
-		case "6sides"_case : fractal_type = new SixSide(dim_a, dim_b, dim_c, valueD, valueE, params); break;
+		case "6sides"_case : fractal_type = new Flight(dim_a, dim_b, dim_c, valueD, valueE, std::make_unique<SixSidePath>(params)); break;
+		case "wander"_case : fractal_type = new Flight(dim_a, dim_b, dim_c, valueD, valueE, std::make_unique<WanderPath>(params)); break;
 		case "circle"_case : fractal_type = new Circle(dim_a, dim_b, dim_c, valueD, valueE); break;
 		case "sphere"_case : fractal_type = new Sphere(dim_a, dim_b, dim_c, valueD, valueE, params); break;
 		case "tileable"_case : fractal_type = new Tileable(dim_a, dim_b, dim_c, valueD, valueE); break;

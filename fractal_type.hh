@@ -3,6 +3,7 @@
 #define FRACTAL_TYPE_HH
 
 #include <array>
+#include <memory>
 #include <utility>
 #include <vector>
 #include <cmath>
@@ -74,52 +75,124 @@ protected:
 };
 
 
-class SixSide : public SimpleFractalType
+struct Vec3 { double x, y, z; };
+// unit quaternion, shared by the Catmull-Rom spline path implementations
+struct Quat { double w, x, y, z; };
+
+// position and orientation of the image window in the unit ABC cube for one
+// frame: a pixel with window coordinates u, v in [0,1] maps to
+// corner + u_axis*u + v_axis*v
+struct WindowPose
+{
+	Vec3 corner;
+	Vec3 u_axis;
+	Vec3 v_axis;
+};
+
+// a time-dependent path of the image window through the unit ABC cube
+class FlightPath
 {
 public:
-	struct Quat { double w, x, y, z; };
-	struct Vec3 { double x, y, z; };
+	virtual ~FlightPath() = default;
 
-	// the (A,B) slice at C=cmin tilts about 6 cube edges (90 degrees each,
-	// axes A,C,B,A,C,B), visiting all 6 faces of the ABC cube
-	// and ending back at the start face (window rotated 180 degrees)
-	// _params: [rotate][,ease]
-	//   rotate: 1: the window additionally rotates 180 degrees in the plane
-	//           over the whole animation, so the animation loops seamlessly
-	//   ease:   1: each 90-degree tilt uses smoothstep timing (3t^2-2t^3)
-	//           instead of a constant angular speed, so the window settles
-	//           at every face and the rotation axis switches are not visible
-	//           2: quaternion Catmull-Rom path through the 6 face poses: the
-	//           rotation axis blends continuously between the tilts (cruise,
-	//           no pause at the faces)
-	//   default: 0,0
-	SixSide(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e, const std::vector<double>& _params)
+	// window pose for the given frame out of frameCount total frames
+	// (frameCount <= 1: single frame, use the start pose)
+	[[nodiscard]] virtual WindowPose poseAt(unsigned frame, unsigned frameCount) const = 0;
+	[[nodiscard]] virtual const char* name() const = 0;
+};
+
+// generic flight: a FlightPath provides the image window pose in the unit
+// ABC cube per frame, each pixel is the affine combination
+// corner + u_axis*u + v_axis*v scaled to the a/b/c ranges
+class Flight : public SimpleFractalType
+{
+public:
+	Flight(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e, std::unique_ptr<FlightPath>&& _path)
 	: SimpleFractalType(_a, _b, _c, _d, _e)
-	, rotate(_params.size() > 0 && _params[0] != 0.0)
-	, ease(_params.size() > 1 ? _params[1] : 0)
-	{
-		if (ease == 2) build_cr_path();
-	}
+	, path(std::move(_path))
+	{}
 
 	void per_image(double values[5], unsigned frame) const override;
 	void per_line (double values[5], unsigned frame, unsigned line) const override;
 	void per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const override;
+	[[nodiscard]] const char* name() const override { return path->name(); }
+
+private:
+	std::unique_ptr<FlightPath> path;
+	// cached by per_image (called once per frame before the parallel pixel loop)
+	mutable WindowPose pose{};
+	mutable unsigned pose_frame{~0u};
+};
+
+// the classic sixsides flight: the (A,B) slice at C=cmin tilts about 6 cube
+// edges (90 degrees each, axes A,C,B,A,C,B), visiting all 6 faces of the
+// ABC cube and ending back at the start face (window rotated 180 degrees)
+// _params: [rotate][,ease]
+//   rotate: 1: the window additionally rotates 180 degrees in the plane
+//           over the whole animation, so the animation loops seamlessly
+//   ease:   1: each 90-degree tilt uses smoothstep timing (3t^2-2t^3)
+//           instead of a constant angular speed, so the window settles
+//           at every face and the rotation axis switches are not visible
+//           2: quaternion Catmull-Rom path through the 6 face poses: the
+//           rotation axis blends continuously between the tilts (cruise,
+//           no pause at the faces)
+//   default: 0,0
+class SixSidePath : public FlightPath
+{
+public:
+	explicit SixSidePath(const std::vector<double>& params);
+
+	WindowPose poseAt(unsigned frame, unsigned frameCount) const override;
 	[[nodiscard]] const char* name() const override { return "six_side"; }
 
 private:
 	const bool rotate;
 	const int ease;
-	// ease == 2: periodic Catmull-Rom path through the 7 face poses K0..K6
-	// (K6 = start face rotated 180 degrees); cr_qend[0] is the pose at t=-1
-	// (= K5), cr_qend[1] the pose at t=7 (= K1), with aligned quaternion signs
-	std::array<Quat, 7> cr_qk{};
-	std::array<Vec3, 7> cr_tk{};
-	std::array<Quat, 2> cr_qend{};
-	std::array<Vec3, 2> cr_tend{};
-	// cumulative path length for the constant-speed parameterization
-	std::vector<double> cr_arclen;
-	void build_cr_path();
+
+	// for ease==2: Catmull-Rom spline path:
+	std::array<Quat, 7> cr_qk{};   // orientation quaternions at the 7 keyframes K0..K6 (K6 = start face rotated 180 degrees)
+	std::array<Vec3, 7> cr_tk{};   // corner translations at K0..K6
+	std::array<Quat, 2> cr_qend{}; // quaternions at t=-1 (=K5) and t=7 (=K1), with signs aligned to their neighbors
+	std::array<Vec3, 2> cr_tend{}; // corner translations at t=-1 (=K5) and t=7 (=K1)
+	std::vector<double> cr_arclen; // cumulative path length for the constant-speed parameterization
+	void build_catmull_rom_path();
+
+	// evaluates the periodic Catmull-Rom spline (orientation quaternion and
+	// corner translation) at path position t, given in segment units:
+	// t = seg + tau, seg in 0..5, tau in [0,1). Raw evaluation with the
+	// spline's own timing; pose_catmull_rom_spline() applies the arc-length
+	// reparameterization on top
 	std::pair<Quat, Vec3> cr_pose_at(double t) const;
+
+	// window pose on the classic flight: the window swings 90 degrees about a
+	// cube edge per segment like a door about its hinge (the hinge edge is
+	// the rotation axis), ease 0 = constant angular speed, ease 1 = smoothstep
+	WindowPose pose_hinge(double t) const;
+
+	WindowPose pose_catmull_rom_spline(double t) const;
+};
+
+// random wander: the window center travels along a closed Catmull-Rom
+// spline through randomly generated keyframes (centers uniform in the unit
+// cube, random orientations), reparameterized by arc length for a constant
+// cruise speed; the loop is seamless by construction
+// _params: [keyframes][,seed][,scale]  (default: 6,0,1.0; keyframes >= 3)
+class WanderPath : public FlightPath
+{
+public:
+	explicit WanderPath(const std::vector<double>& params);
+
+	WindowPose poseAt(unsigned frame, unsigned frameCount) const override;
+	[[nodiscard]] const char* name() const override { return "wander"; }
+
+private:
+	const unsigned keyframes;
+	const double scale;
+	std::vector<Vec3> kf_center;  // keyframe centers in the unit cube
+	std::vector<Quat> kf_rot;     // keyframe orientation quaternions, signs aligned
+	std::vector<double> arclen;   // cumulative path length for the constant-speed parameterization
+	// raw periodic Catmull-Rom evaluation at path position t in [0, keyframes)
+	std::pair<Quat, Vec3> spline_pose(double t) const;
 };
 
 
@@ -281,7 +354,7 @@ public:
 	, freq(_params.size()>0 ? _params[0] : 3.0)
 	, amp_a((_params.size()>1 ? _params[1] : 0.333) * (a.max-a.min))
 	, amp_b((_params.size()>2 ? _params[2] : 0.333) * (b.max-b.min))
-	, perlin(_params.size()>3 ? (unsigned)_params[3] : 0)
+	, perlin(_params.size()>3 ? unsigned(_params[3]) : 0)
 	{}
 
 	void per_line (double values[5], unsigned frame, unsigned line) const override;

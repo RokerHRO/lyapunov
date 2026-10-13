@@ -47,6 +47,7 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
 #### Fractal types
 * `plain`  : just a 2D image or an animation of a linear flight through the 3D cube
 * `6sides` : tilts the (A,B) slice at `C=cmin` about 6 cube edges (90 degrees each, axes A,C,B,A,C,B), visiting all 6 faces of the ABC cube. `-p [rotate][,ease]`: rotate 1: the window rotates 180 degrees in the plane over the animation (seamless loop); ease 1: smoothstep timing, the window settles at every face; ease 2: quaternion Catmull-Rom path through the faces (continuous axis blend, cruise).
+* `wander` : the window center wanders along a closed Catmull-Rom spline through N random keyframes (uniformly random centers inside the ABC cube, random orientations, constant cruise speed), seamless loop. `-p [keyframes][,seed][,scale]` (default `6,0,1.0`; keyframes >= 3, the same seed reproduces the same tour, scale = window size relative to a cube face, < 1 = zoom).
 * `circle` : values for C and D form a circle: Center is at `(z_min + z_max)/2`, D.  Radius is `abs(z_max-z_min)/2`.
 * `sphere` : a sphere in the ABC cube. D+E can form a circle in animation mode.
 * `tileable` : A and B each trace a full circle in the parameter plane, so the image repeats seamlessly in both directions (wallpaper).
@@ -159,6 +160,13 @@ The motion of the image plane through the ABC cube is also visualized geometrica
 
 * without rotate: [ease=0](img/6sides-ease0.mp4) &nbsp; [ease=1](img/6sides-ease1.mp4) &nbsp; [ease=2](img/6sides-ease2.mp4)
 * with rotate: [ease=0](img/6sides-ease0-rotate.mp4) &nbsp; [ease=1](img/6sides-ease1-rotate.mp4) &nbsp; [ease=2](img/6sides-ease2-rotate.mp4)
+
+<br clear="all" />
+
+#### Wander
+`lyapunov -W 512 -H 512 -i 400 -s ABBCAC -f 256 -t wander -p 10,12345,1.0 -o wander-{f}`
+
+The window center flies along a closed Catmull-Rom spline through 10 random keyframes (seed 12345, for reproducibility): the keyframe centers are uniformly random inside the ABC cube, their orientations random, and the tour travels at constant cruise speed, so the animation loops seamlessly (frame N = frame 0). `scale` = 1.0 makes the window the size of a cube face; smaller values zoom in, larger ones zoom out.
 
 <br clear="all" />
 
