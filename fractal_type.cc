@@ -217,6 +217,32 @@ WindowPose SixSidePath::pose_catmull_rom_spline(double t) const
 	return {tr, qrot(q, {1.0, 0.0, 0.0}), qrot(q, {0.0, 1.0, 0.0})};
 }
 
+// the hinge edge (endpoints in the unit cube) of each segment, for the tour
+// visualization (scripts/cube_tour.py)
+static const Vec3 hinge_edge[6][2] = {
+	{{0.0, 1.0, 0.0}, {1.0, 1.0, 0.0}},
+	{{1.0, 1.0, 0.0}, {1.0, 1.0, 1.0}},
+	{{1.0, 0.0, 1.0}, {1.0, 1.0, 1.0}},
+	{{0.0, 0.0, 1.0}, {1.0, 0.0, 1.0}},
+	{{0.0, 0.0, 0.0}, {0.0, 0.0, 1.0}},
+	{{0.0, 0.0, 0.0}, {0.0, 1.0, 0.0}},
+};
+
+void SixSidePath::dumpPathData(std::ostream& os, unsigned frameCount) const
+{
+	if (ease == 2 || frameCount < 1)
+		return;
+	for (unsigned frame = 0; frame < frameCount; ++frame)
+	{
+		const unsigned seg = std::min(6.0 * (frame + 0.5) / frameCount, 5.9999999);
+		const Vec3& a = hinge_edge[seg][0];
+		const Vec3& b = hinge_edge[seg][1];
+		os << "HINGE " << frame << ' '
+			<< a.x << ' ' << a.y << ' ' << a.z << ' '
+			<< b.x << ' ' << b.y << ' ' << b.z << '\n';
+	}
+}
+
 void Flight::per_image(double values[5], unsigned frame) const
 {
 	if (frame != pose_frame)
@@ -316,6 +342,18 @@ WindowPose WanderPath::poseAt(unsigned frame, unsigned frameCount) const
 	                  center.y - 0.5*(u_axis.y+v_axis.y),
 	                  center.z - 0.5*(u_axis.z+v_axis.z)};
 	return {corner, u_axis, v_axis};
+}
+
+void WanderPath::dumpPathData(std::ostream& os, unsigned) const
+{
+	for (const auto& c : kf_center)
+		os << "KEYFRAME " << c.x << ' ' << c.y << ' ' << c.z << '\n';
+	const unsigned m = keyframes * 512;
+	for (unsigned i = 0; i < m; ++i)
+	{
+		const auto [q, c] = spline_pose(double(keyframes) * i / m);
+		os << "CURVE " << c.x << ' ' << c.y << ' ' << c.z << '\n';
+	}
 }
 
 

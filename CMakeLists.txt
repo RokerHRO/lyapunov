@@ -35,7 +35,10 @@ add_executable(gen-ab-sequences gen-ab-sequences.cc)
 
 add_executable(gen_zoom gen_zoom.cc)
 
+add_executable(gen_poses gen_poses.cc
+        fractal_type.cc)
+
 add_executable(lissa_overview lissajous.cc lissa_overview.cc)
 
-install(TARGETS lyapunov gen_zoom gen-ab-sequences lissa_overview
+install(TARGETS lyapunov gen_zoom gen-ab-sequences gen_poses lissa_overview
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
