@@ -4,6 +4,7 @@
 
 #include <array>
 #include <memory>
+#include <ostream>
 #include <utility>
 #include <vector>
 #include <cmath>
@@ -99,6 +100,11 @@ public:
 	// (frameCount <= 1: single frame, use the start pose)
 	[[nodiscard]] virtual WindowPose poseAt(unsigned frame, unsigned frameCount) const = 0;
 	[[nodiscard]] virtual const char* name() const = 0;
+
+	// optional auxiliary path data (path curve, keyframes, hinge edges) for
+	// the tour visualization (scripts/cube_tour.py), written to the stream as
+	// tagged lines; frameCount = number of animation frames
+	virtual void dumpPathData(std::ostream&, unsigned) const {}
 };
 
 // generic flight: a FlightPath provides the image window pose in the unit
@@ -170,6 +176,8 @@ private:
 	WindowPose pose_hinge(double t) const;
 
 	WindowPose pose_catmull_rom_spline(double t) const;
+
+	void dumpPathData(std::ostream&, unsigned frameCount) const override;
 };
 
 // random wander: the window center travels along a closed Catmull-Rom
@@ -193,6 +201,8 @@ private:
 	std::vector<double> arclen;   // cumulative path length for the constant-speed parameterization
 	// raw periodic Catmull-Rom evaluation at path position t in [0, keyframes)
 	std::pair<Quat, Vec3> spline_pose(double t) const;
+
+	void dumpPathData(std::ostream&, unsigned frameCount) const override;
 };
 
 
