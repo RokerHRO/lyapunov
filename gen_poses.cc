@@ -1,9 +1,9 @@
-// Dumps the image window poses of a "Flight" fractal type (6sides, wander)
-// to stdout or a file. The poses are in the unit ABC cube, exactly the ones
-// used by the fractal render, so the visualization script scripts/cube_tour.py
-// does not need its own copy of the path math.
+// Dumps the image window poses of a "Flight" fractal type (6sides, wander,
+// rotor) to stdout or a file. The poses are in the unit ABC cube, exactly
+// the ones used by the fractal render, so the visualization script
+// scripts/cube_tour.py does not need its own copy of the path math.
 //
-// Usage: gen_poses -t <6sides|wander> [-p params] [-f frames] [-o outfile]
+// Usage: gen_poses -t <6sides|wander|rotor> [-p params] [-f frames] [-o outfile]
 //
 // Output, one line per item (doubles with 17 significant digits, i.e. the
 // full round-trip precision):
@@ -60,7 +60,7 @@ int main(int argc, char** argv)
 			default:
 				fprintf(stderr,
 					"Dumps the window poses of a flight fractal type for scripts/cube_tour.py.\n\n"
-					"Usage: gen_poses -t <6sides|wander> [-p params] [-f frames] [-o outfile]\n");
+					"Usage: gen_poses -t <6sides|wander|rotor> [-p params] [-f frames] [-o outfile]\n");
 				return 2;
 		}
 	}
