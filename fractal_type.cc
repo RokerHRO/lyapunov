@@ -65,6 +65,15 @@ Vec3 qrot(Quat q, Vec3 v)
 	        v.z + q.w*t.z + (q.x*t.y - q.y*t.x)};
 }
 
+// (x,y,z) normalized to unit length; throws for a zero (or too small) vector
+Vec3 normalize(double x, double y, double z)
+{
+	const double n = std::sqrt(x*x + y*y + z*z);
+	if (n < 1e-15)
+		throw std::invalid_argument("normalize: the vector must be a non-zero vector");
+	return {x/n, y/n, z/n};
+}
+
 // Catmull-Rom (Hermite) basis on [0,1]
 double cr_h00(double t) { return (2.0*t - 3.0)*t*t + 1.0; }     // 2t^3-3t^2+1
 double cr_h01(double t) { return t*t*(3.0 - 2.0*t); }           // -2t^3+3t^2
@@ -361,15 +370,13 @@ void WanderPath::dumpPathData(std::ostream& os, unsigned) const
 }
 
 RotorPath::RotorPath(const std::vector<double>& params)
-: axis{params.size() > 0 ? params[0] : 0.0, params.size() > 1 ? params[1] : 0.0, params.size() > 2 ? params[2] : 1.0}
+: axis(params.size() >= 3 ? normalize(params[0], params[1], params[2]) : Vec3{1.0, 0.0, 0.0})
 , turns(params.size() > 3 ? params[3] : 1.0)
 {
-	const double n = std::sqrt(axis.x*axis.x + axis.y*axis.y + axis.z*axis.z);
-	if (n < 1e-15)
-		throw std::invalid_argument("rotor: the rotation axis must be a non-zero vector");
+	if (params.size() > 0 && params.size() < 3)
+		throw std::invalid_argument("rotor: -p takes no parameters or [ax,ay,az][,turns]");
 	if (turns < 1.0 || turns != std::floor(turns + 0.5))
 		throw std::invalid_argument("rotor: turns must be an integer >= 1 (only full turns loop seamlessly)");
-	axis = {axis.x/n, axis.y/n, axis.z/n};
 }
 
 WindowPose RotorPath::poseAt(unsigned frame, unsigned frameCount) const

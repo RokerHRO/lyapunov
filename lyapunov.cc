@@ -64,9 +64,6 @@ double lambda_min = -2.55;
 double lambda_max = 0.3959;
 
 
-std::vector<std::vector<float>> prob; // probability for each img pixel
-
-
 struct RGB
 {
 	unsigned char r,g,b;
@@ -88,9 +85,15 @@ std::string replace_all(std::string orig, std::string_view search, std::string_v
 
 std::string decorate_filename(std::string filename, const unsigned frame_nr)
 {
-	char frame_nr_string[16] = {};
-	const unsigned digits = snprintf(nullptr, 0, "%u", csize-1);
-	snprintf(frame_nr_string, sizeof(frame_nr_string), "%0*u", digits, frame_nr);
+	// no animation (csize==0): {f} expands to the empty string
+	std::string frame_nr_string;
+	if (csize > 0)
+	{
+		char buf[16] = {};
+		const unsigned digits = snprintf(nullptr, 0, "%u", csize-1);
+		snprintf(buf, sizeof(buf), "%0*u", digits, frame_nr);
+		frame_nr_string = buf;
+	}
 	filename = replace_all(filename, "{s}", seq);
 	filename = replace_all(filename, "{i}", std::to_string(nmax) );
 	filename = replace_all(filename, "{f}", frame_nr_string);
@@ -198,7 +201,7 @@ void lyapunov(std::vector<PXL>& img, const int max_iter, const std::string& sequ
 					prod_deriv = 1;
 				}
 			}
-			const double lambda = diverged ? 1e30 : sum_log_deriv / (nmax*sequence.length());
+			const double lambda = diverged ? 1e30 : sum_log_deriv / (max_iter*sequence.length());
 			img[size_t(ai) * width + bi] = lambda2pxl<PXL>(lambda);
 		}
 	}
@@ -212,6 +215,8 @@ void make_ppm(const unsigned frame_nr)
 	if (!outfile.empty())
 	{
 		std::string outfile_ppm = decorate_filename(outfile, frame_nr);
+		if (outfile_ppm.empty() || outfile_ppm.back() == '/' || outfile_ppm.back() == '\\')
+			throw std::runtime_error("the output filename is empty after replacing the template patterns");
 		if (!outfile_ppm.ends_with(".ppm"))
 			outfile_ppm += ".ppm";
 
@@ -354,7 +359,7 @@ void print_type_help(FILE* f)
 		"\t             size relative to a cube face, < 1 = zoom)\n"
 		"\trotor  : the (A,B) slice at C=0.5 (A vertical, B horizontal) spins in place about an axis\n"
 		"\t         through the cube center, whole number of full turns over the animation, seamless loop\n"
-		"\t         -p [ax,ay,az][,turns]  (default 0,0,1,1: the C axis, one turn; e.g. 1,1,1 = the\n"
+		"\t         -p [ax,ay,az][,turns]  (default 1,0,0,1: the A axis, one turn; e.g. 1,1,1 = the\n"
 		"\t             space diagonal)\n"
 		"\tcircle : C+D circle\n"
 		"\tsphere : Sphere in the ABC cube. D=fix, E=fix\n"
@@ -403,8 +408,22 @@ int main(int argc, char** argv)
 	{
 		switch(a)
 		{
-			case 'W': bsize = atoi(optarg); break;
-			case 'H': asize = atoi(optarg); break;
+			case 'W':
+				bsize = atoi(optarg);
+				if (bsize <= 0)
+				{
+					fprintf(stderr, "Option -W expects a positive width in pixel.\n");
+					return 2;
+				}
+				break;
+			case 'H':
+				asize = atoi(optarg);
+				if (asize <= 0)
+				{
+					fprintf(stderr, "Option -H expects a positive height in pixel.\n");
+					return 2;
+				}
+				break;
 			case 'f': csize = atoi(optarg); setC = true; break;
 			case 'z': cmin  = atof(optarg); setC = true; break;
 			case 'Z': cmax  = atof(optarg); setC = true; break;

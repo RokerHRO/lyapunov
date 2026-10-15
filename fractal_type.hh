@@ -211,7 +211,7 @@ private:
 // spins in place about an axis through the cube center: the window performs
 // a whole number of full turns over the animation, so the loop is seamless
 // by construction
-// _params: [ax,ay,az][,turns]  (default 0,0,1,1: the C axis, one full turn)
+// _params: [ax,ay,az][,turns]  (default 1,0,0,1: the A axis, one full turn)
 class RotorPath : public FlightPath
 {
 public:
@@ -221,7 +221,7 @@ public:
 	[[nodiscard]] const char* name() const override { return "rotor"; }
 
 private:
-	Vec3 axis;         // normalized rotation axis
+	const Vec3 axis;    // normalized rotation axis
 	const double turns; // number of full turns over the animation (>= 1)
 };
 
