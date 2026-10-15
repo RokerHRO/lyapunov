@@ -48,7 +48,7 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
 * `plain`  : just a 2D image or an animation of a linear flight through the 3D cube
 * `6sides` : tilts the (A,B) slice at `C=cmin` about 6 cube edges (90 degrees each, axes A,C,B,A,C,B), visiting all 6 faces of the ABC cube. `-p [rotate][,ease]`: rotate 1: the window rotates 180 degrees in the plane over the animation (seamless loop); ease 1: smoothstep timing, the window settles at every face; ease 2: quaternion Catmull-Rom path through the faces (continuous axis blend, cruise).
 * `wander` : the window center wanders along a closed Catmull-Rom spline through N random keyframes (uniformly random centers inside the ABC cube, random orientations, constant cruise speed), seamless loop. `-p [keyframes][,seed][,scale]` (default `6,0,1.0`; keyframes >= 3, the same seed reproduces the same tour, scale = window size relative to a cube face, < 1 = zoom).
-* `rotor` : the (A,B) slice at `C=0.5` (A vertical, B horizontal in the image) spins in place about an axis through the cube center, a whole number of full turns over the animation, seamless loop. `-p [ax,ay,az][,turns]` (default `0,0,1,1`: the C axis, one turn; e.g. `1,1,1` = the space diagonal).
+* `rotor` : the (A,B) slice at `C=0.5` (A vertical, B horizontal in the image) spins in place about an axis through the cube center, a whole number of full turns over the animation, seamless loop. `-p [ax,ay,az][,turns]` (default `1,0,0,1`: the A axis, one turn; e.g. `1,1,1` = the space diagonal).
 * `circle` : values for C and D form a circle: Center is at `(z_min + z_max)/2`, D.  Radius is `abs(z_max-z_min)/2`.
 * `sphere` : a sphere in the ABC cube. D+E can form a circle in animation mode.
 * `tileable` : A and B each trace a full circle in the parameter plane, so the image repeats seamlessly in both directions (wallpaper).
@@ -143,9 +143,11 @@ Every point of the (A,B) plane is reflected about the fixed inversion circle: th
 
 The (A,B) slice at `C=cmin` is hinged at a cube edge and tilted by 90 degrees to the next face, six times in a row (axes A,C,B,A,C,B): the tour visits all 6 faces of the ABC cube — `C=cmin`, `B=bmax`, `A=amax`, `C=cmax`, `B=bmin`, `A=amin` — and ends back at the start face (window rotated 180 degrees). Between two faces the image is a tilted slice through the cube. The animation shows the tour (sequence ABBCAC, values 3.1…3.7).
 
+<!-- <img src="img/anim-6sides-ABBCAC-rotate.gif" align="right" /> -->
+
 With `-p 1` (parameter `rotate`) the window additionally rotates 180 degrees in the plane over the whole animation, compensating the net rotation of the 6 tilts, so the animation loops seamlessly.
 
-<img src="img/anim-6sides-ABBCAC-rotate.gif" align="right" />
+
 
 `lyapunov -W 512 -H 512 -i 400 -s ABBCAC -f 240 -t 6sides -p 1 -x 3.1 -X 3.7 -y 3.7 -Y 3.1 -z 3.1 -Z 3.7 -o 6sides-{f}`
 
@@ -153,7 +155,7 @@ The second `-p` parameter `ease` replaces the constant angular speed of each til
 
 `lyapunov -W 256 -H 256 -i 400 -s ABBCAC -f 256 -t 6sides -p 1,1 -x 3.1 -X 3.7 -y 3.7 -Y 3.1 -z 3.1 -Z 3.7 -o 6sides-{f}`
 
-With `ease` = 2 the tour follows a quaternion Catmull-Rom path through the 6 face poses: the rotation axis blends continuously between the tilts, so the window glides around the cube without stopping at the faces (the path is also smooth across the loop point):
+With `ease=2` the tour follows a quaternion Catmull-Rom path through the 6 face poses: the rotation axis blends continuously between the tilts, so the window glides around the cube without stopping at the faces (the path is also smooth across the loop point):
 
 `lyapunov -W 256 -H 256 -i 400 -s ABBCAC -f 256 -t 6sides -p 1,2 -x 3.1 -X 3.7 -y 3.7 -Y 3.1 -z 3.1 -Z 3.7 -o 6sides-{f}`
 
@@ -169,16 +171,18 @@ The motion of the image plane through the ABC cube is also visualized geometrica
 
 <img src="img/anim-wander-ABBCAC.gif" align="right" />
 
-The window center flies along a closed Catmull-Rom spline through 10 random keyframes (seed 12345, for reproducibility): the keyframe centers are uniformly random inside the ABC cube (here A=B=C=3.2…3.8), their orientations random, and the tour travels at constant cruise speed, so the animation loops seamlessly (frame N = frame 0). `scale` = 1.0 makes the window the size of a cube face; smaller values zoom in, larger ones zoom out.
+The window center flies along a closed Catmull-Rom spline through 10 random keyframes (seed 12345, for reproducibility): the keyframe centers are uniformly random inside the ABC cube (here A=B=C=3.2…3.8), their orientations random, and the tour travels at constant cruise speed, so the animation loops seamlessly (frame N = frame 0). `scale` = 1.0 makes the window the size of a cube face; smaller values zoom in, larger ones zoom out. The motion of the image window is also visualized geometrically (generated the same way as for `6sides` and `rotor`, via `gen_poses` and `scripts/cube_tour.py`, including the spline and the keyframes):
+
+* pose tour (window in the wireframe cube): [full tour (all 10 keyframes and the path)](img/wander-tour.mp4)
 
 <br clear="all" />
 
 #### Rotor
 `lyapunov -W 512 -H 512 -i 400 -s ABBCAC -f 256 -t rotor -p 1,0,0 -x 3.2 -X 3.8 -y 3.2 -Y 3.8 -z 3.2 -Z 3.8 -o rotor-a-{f}`
 
-The (A,B) slice at `C=0.5` (A vertical, B horizontal in the image) spins in place about an axis through the cube center: here the A axis, so the slice flips vertically. The axis is given as a direction vector: `-p 0,0,1` = the C axis (the slice rotates in its own plane), `-p 1,1,0` = a face diagonal, `-p 1,1,1` = the space diagonal, and the fourth parameter is the number of full turns (default 1), so the animation loops seamlessly. The animation with the space diagonal:
-
 <img src="img/anim-rotor-diag-ABBCAC.gif" align="right" />
+
+The (A,B) slice at `C=0.5` (A vertical, B horizontal in the image) spins in place about an axis through the cube center: here the A axis, so the slice flips vertically. The axis is given as a direction vector: `-p 0,0,1` = the C axis (the slice rotates in its own plane), `-p 1,1,0` = a face diagonal, `-p 1,1,1` = the space diagonal, and the fourth parameter is the number of full turns (default 1), so the animation loops seamlessly. The animation with the space diagonal:
 
 <br clear="all" />
 
