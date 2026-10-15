@@ -2,6 +2,10 @@
 
 #include <cmath>
 #include <algorithm>
+#include <stdexcept>
+#include <string>
+
+#include "string_case.hh"
 
 namespace
 {
@@ -254,12 +258,12 @@ void Flight::per_image(double values[5], unsigned frame) const
 	values[4] = e;
 }
 
-void Flight::per_line(double values[5], unsigned frame, unsigned line) const
+void Flight::per_line(double /*values*/[5], unsigned /*frame*/, unsigned /*line*/) const
 {
 	// A, B and C all depend on line and column, see per_pixel
 }
 
-void Flight::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
+void Flight::per_pixel(double values[5], unsigned /*frame*/, unsigned line, unsigned column) const
 {
 	const double u = (column+0.5) / b.size;
 	const double v = (line+0.5) / a.size;
@@ -356,6 +360,36 @@ void WanderPath::dumpPathData(std::ostream& os, unsigned) const
 	}
 }
 
+RotorPath::RotorPath(const std::vector<double>& params)
+: axis{params.size() > 0 ? params[0] : 0.0, params.size() > 1 ? params[1] : 0.0, params.size() > 2 ? params[2] : 1.0}
+, turns(params.size() > 3 ? params[3] : 1.0)
+{
+	const double n = std::sqrt(axis.x*axis.x + axis.y*axis.y + axis.z*axis.z);
+	if (n < 1e-15)
+		throw std::invalid_argument("rotor: the rotation axis must be a non-zero vector");
+	if (turns < 1.0 || turns != std::floor(turns + 0.5))
+		throw std::invalid_argument("rotor: turns must be an integer >= 1 (only full turns loop seamlessly)");
+	axis = {axis.x/n, axis.y/n, axis.z/n};
+}
+
+WindowPose RotorPath::poseAt(unsigned frame, unsigned frameCount) const
+{
+	// the (A,B) slice at C=0.5: A vertical, B horizontal in the image plane
+	const Vec3 center{0.5, 0.5, 0.5};
+	Vec3 corner{0.0, 0.0, 0.5};
+	Vec3 u_axis{0.0, 1.0, 0.0}; // B
+	Vec3 v_axis{1.0, 0.0, 0.0}; // A
+
+	const double angle = 2.0 * M_PI * turns * ((frameCount > 1) ? double(frame + 0.5) / frameCount : 0.0);
+	const double s = std::sin(angle / 2.0);
+	const Quat q{std::cos(angle / 2.0), axis.x*s, axis.y*s, axis.z*s};
+	corner = qrot(q, {corner.x-center.x, corner.y-center.y, corner.z-center.z});
+	corner = {corner.x + center.x, corner.y + center.y, corner.z + center.z};
+	u_axis = qrot(q, u_axis);
+	v_axis = qrot(q, v_axis);
+	return {corner, u_axis, v_axis};
+}
+
 
 void Circle::per_image(double values[5], unsigned frame) const
 {
@@ -382,12 +416,12 @@ void Sphere::per_image(double values[5], unsigned frame) const
 	values[4] = e + radius_de * sin(phi);
 }
 
-void Sphere::per_line(double values[5], unsigned frame, unsigned line) const
+void Sphere::per_line(double values[5], unsigned /*frame*/, unsigned line) const
 {
 	values[0] = center_a - sc_line.at(line).c * radius_a;
 }
 
-void Sphere::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
+void Sphere::per_pixel(double values[5], unsigned /*frame*/, unsigned line, unsigned column) const
 {
 	const auto pl = sc_line.at(line);
 	const auto pc = sc_column.at(column);
@@ -423,12 +457,12 @@ std::vector<SinCos> Sphere::calculate_column_vector() const
 	return result;
 }
 
-void Tileable::per_line(double values[5], unsigned frame, unsigned line) const
+void Tileable::per_line(double values[5], unsigned /*frame*/, unsigned line) const
 {
 	values[0] = center_a + radius_a * sin_line.at(line);
 }
 
-void Tileable::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
+void Tileable::per_pixel(double values[5], unsigned /*frame*/, unsigned /*line*/, unsigned column) const
 {
 	values[1] = center_b + radius_b * cos_column.at(column);
 }
@@ -487,11 +521,11 @@ void Zoom::per_image(double values[5], unsigned frame) const
 	values[4] = e;
 }
 
-void Zoom::per_line(double values[5], unsigned frame, unsigned line) const
+void Zoom::per_line(double /*values*/[5], unsigned /*frame*/, unsigned /*line*/) const
 {
 }
 
-void Zoom::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
+void Zoom::per_pixel(double values[5], unsigned /*frame*/, unsigned line, unsigned column) const
 {
 	const double x = (column + 0.5) / b.size - 0.5;
 	const double y = (line + 0.5) / a.size - 0.5;
@@ -499,12 +533,12 @@ void Zoom::per_pixel(double values[5], unsigned frame, unsigned line, unsigned c
 	values[1] = center_b + b_x * x - b_y * y;
 }
 
-void Wavy::per_line(double values[5], unsigned frame, unsigned line) const
+void Wavy::per_line(double /*values*/[5], unsigned /*frame*/, unsigned /*line*/) const
 {
 
 }
 
-void Wavy::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
+void Wavy::per_pixel(double values[5], unsigned /*frame*/, unsigned line, unsigned column) const
 {
 	values[0] = a.min + (a.max-a.min)/a.size*(line+0.5)   + amp_a * sin(k_a * column - phase_a);
 	values[1] = b.min + (b.max-b.min)/b.size*(column+0.5) + amp_b * sin(k_b * line - phase_b);
@@ -559,7 +593,7 @@ double detail::Perlin::noise(double x, double y) const
 	return x1 + v*(x2 - x1);
 }
 
-void Noise::per_line(double values[5], unsigned frame, unsigned line) const
+void Noise::per_line(double /*values*/[5], unsigned /*frame*/, unsigned /*line*/) const
 {
 	// A depends on both line and column (2D noise)
 }
@@ -573,7 +607,7 @@ void Noise::per_pixel(double values[5], unsigned frame, unsigned line, unsigned 
 	values[1] = b.min + (b.max-b.min)/b.size*(column+0.5) + amp_b * t * perlin.noise(x, y + 52.0);
 }
 
-void Inversion::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
+void Inversion::per_pixel(double values[5], unsigned /*frame*/, unsigned line, unsigned column) const
 {
 	// reflection about the inversion circle: distance d and angle theta from the center,
 	// projected to the radius R^2/d (radius R scaled by R/d) at the same angle
@@ -588,6 +622,49 @@ void Inversion::per_pixel(double values[5], unsigned frame, unsigned line, unsig
 		values[0] = center_a + scale * da;
 		values[1] = center_b + scale * db;
 	}
+}
+
+
+std::unique_ptr<FractalType> make_fractal_type(std::string_view type,
+	const Dimension& a, const Dimension& b, const Dimension& c, double d, double e,
+	const std::vector<double>& params)
+{
+	switch (case_hash(type))
+	{
+		case "plain"_case: return std::make_unique<SimpleFractalType>(a, b, c, d, e);
+		case "6sides"_case: return std::make_unique<Flight>(a, b, c, d, e, std::make_unique<SixSidePath>(params));
+		case "wander"_case: return std::make_unique<Flight>(a, b, c, d, e, std::make_unique<WanderPath>(params));
+		case "rotor"_case: return std::make_unique<Flight>(a, b, c, d, e, std::make_unique<RotorPath>(params));
+		case "circle"_case: return std::make_unique<Circle>(a, b, c, d, e);
+		case "sphere"_case: return std::make_unique<Sphere>(a, b, c, d, e, params);
+		case "tileable"_case: return std::make_unique<Tileable>(a, b, c, d, e);
+		case "tileable-loop"_case: return std::make_unique<TileableLoop>(a, b, c, d, e);
+		case "zoom"_case: return std::make_unique<Zoom>(a, b, c, d, e, params);
+		case "wavy"_case:
+			if (params.size() > 0 && params[0] <= 0.0)
+				throw std::invalid_argument("wavy: frequency_a must be > 0 (got " + std::to_string(params[0]) + ").");
+			if (params.size() > 3 && params[3] <= 0.0)
+				throw std::invalid_argument("wavy: frequency_b must be > 0 (got " + std::to_string(params[3]) + ").");
+			return std::make_unique<Wavy>(a, b, c, d, e, params);
+		case "noise"_case:
+			if (params.size() > 0 && params[0] <= 0.0)
+				throw std::invalid_argument("noise: frequency must be > 0 (got " + std::to_string(params[0]) + ").");
+			return std::make_unique<Noise>(a, b, c, d, e, params);
+		case "inversion"_case: return std::make_unique<Inversion>(a, b, c, d, e, params);
+	}
+	throw std::invalid_argument(std::string("unknown fractal type \"") + std::string(type) + "\" (see -t help)");
+}
+
+std::unique_ptr<FlightPath> make_flight_path(std::string_view type,
+	const std::vector<double>& params)
+{
+	switch (case_hash(type))
+	{
+		case "6sides"_case: return std::make_unique<SixSidePath>(params);
+		case "wander"_case: return std::make_unique<WanderPath>(params);
+		case "rotor"_case: return std::make_unique<RotorPath>(params);
+	}
+	throw std::invalid_argument(std::string("unknown flight path type \"") + std::string(type) + "\" (supported: 6sides, wander, rotor)");
 }
 
 

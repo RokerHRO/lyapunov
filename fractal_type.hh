@@ -5,6 +5,8 @@
 #include <array>
 #include <memory>
 #include <ostream>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 #include <cmath>
@@ -57,12 +59,12 @@ public:
 		values[4] = e;
 	}
 
-	void per_line (double values[5], unsigned frame, unsigned line) const override
+	void per_line (double values[5], unsigned /*frame*/, unsigned line) const override
 	{
 		values[0] = a.min + (a.max-a.min)/a.size*(line+0.5);
 	}
 
-	void per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const override
+	void per_pixel(double values[5], unsigned /*frame*/, unsigned /*line*/, unsigned column) const override
 	{
 		values[1] = b.min + (b.max-b.min)/b.size*(column+0.5);
 	}
@@ -203,6 +205,24 @@ private:
 	std::pair<Quat, Vec3> spline_pose(double t) const;
 
 	void dumpPathData(std::ostream&, unsigned frameCount) const override;
+};
+
+// rotor: the (A,B) slice at C=0.5 (A vertical, B horizontal in the image)
+// spins in place about an axis through the cube center: the window performs
+// a whole number of full turns over the animation, so the loop is seamless
+// by construction
+// _params: [ax,ay,az][,turns]  (default 0,0,1,1: the C axis, one full turn)
+class RotorPath : public FlightPath
+{
+public:
+	explicit RotorPath(const std::vector<double>& params);
+
+	WindowPose poseAt(unsigned frame, unsigned frameCount) const override;
+	[[nodiscard]] const char* name() const override { return "rotor"; }
+
+private:
+	Vec3 axis;         // normalized rotation axis
+	const double turns; // number of full turns over the animation (>= 1)
 };
 
 
@@ -394,4 +414,18 @@ public:
 private:
 	const double center_a, center_b, radius;
 };
+
+// factory: creates the fractal type named by the command line string
+// (case-insensitive). Throws std::invalid_argument for an unknown type or
+// invalid parameters.
+std::unique_ptr<FractalType> make_fractal_type(std::string_view type,
+	const Dimension& a, const Dimension& b, const Dimension& c, double d, double e,
+	const std::vector<double>& params);
+
+// factory: creates the flight path (window poses only) named by the command
+// line string (case-insensitive). Throws std::invalid_argument for all
+// types that are not FlightPath subclasses.
+std::unique_ptr<FlightPath> make_flight_path(std::string_view type,
+	const std::vector<double>& params);
+
 #endif // FRACTAL_TYPE_HH

@@ -58,7 +58,7 @@ int nmax = 1000;                /* number of rounds */
 std::vector<double> params;
 
 FILE* of = nullptr;
-FractalType* fractal_type = nullptr;
+std::unique_ptr<FractalType> fractal_type;
 
 /* for color generation; somewhat empirical, in order to match Wickerprint's original colors */
 double lambda_min = -2.55;
@@ -353,6 +353,10 @@ void print_type_help(FILE* f)
 		"\t         keyframes (random orientations, constant cruise speed), seamless loop\n"
 		"\t         -p [keyframes][,seed][,scale]  (default 6,0,1.0; keyframes >= 3, scale = window\n"
 		"\t             size relative to a cube face, < 1 = zoom)\n"
+		"\trotor  : the (A,B) slice at C=0.5 (A vertical, B horizontal) spins in place about an axis\n"
+		"\t         through the cube center, whole number of full turns over the animation, seamless loop\n"
+		"\t         -p [ax,ay,az][,turns]  (default 0,0,1,1: the C axis, one turn; e.g. 1,1,1 = the\n"
+		"\t             space diagonal)\n"
 		"\tcircle : C+D circle\n"
 		"\tsphere : Sphere in the ABC cube. D=fix, E=fix\n"
 		"\ttileable : A and B each trace a full circle, so the image tiles seamlessly in both directions\n"
@@ -556,39 +560,19 @@ int main(int argc, char** argv)
 
 	switch (case_hash(type))
 	{
-		case "plain"_case  : fractal_type = new SimpleFractalType(dim_a, dim_b, dim_c, valueD, valueE); break;
-		case "6sides"_case : fractal_type = new Flight(dim_a, dim_b, dim_c, valueD, valueE, std::make_unique<SixSidePath>(params)); break;
-		case "wander"_case : fractal_type = new Flight(dim_a, dim_b, dim_c, valueD, valueE, std::make_unique<WanderPath>(params)); break;
-		case "circle"_case : fractal_type = new Circle(dim_a, dim_b, dim_c, valueD, valueE); break;
-		case "sphere"_case : fractal_type = new Sphere(dim_a, dim_b, dim_c, valueD, valueE, params); break;
-		case "tileable"_case : fractal_type = new Tileable(dim_a, dim_b, dim_c, valueD, valueE); break;
-		case "tileable-loop"_case : fractal_type = new TileableLoop(dim_a, dim_b, dim_c, valueD, valueE); break;
-		case "zoom"_case : fractal_type = new Zoom(dim_a, dim_b, dim_c, valueD, valueE, params); break;
-		case "wavy"_case :
-			if (params.size() > 0 && params[0] <= 0.0)
-			{
-				fprintf(stderr, "wavy: frequency_a must be > 0 (got %f).\n", params[0]);
-				return 2;
-			}
-			if (params.size() > 3 && params[3] <= 0.0)
-			{
-				fprintf(stderr, "wavy: frequency_b must be > 0 (got %f).\n", params[3]);
-				return 2;
-			}
-			fractal_type = new Wavy(dim_a, dim_b, dim_c, valueD, valueE, params); break;
-		case "noise"_case :
-			if (params.size() > 0 && params[0] <= 0.0)
-			{
-				fprintf(stderr, "noise: frequency must be > 0 (got %f).\n", params[0]);
-				return 2;
-			}
-			fractal_type = new Noise(dim_a, dim_b, dim_c, valueD, valueE, params); break;
-		case "inversion"_case : fractal_type = new Inversion(dim_a, dim_b, dim_c, valueD, valueE, params); break;
-		
 		case "help"_case   : [[fallthrough]];
 		case "-h"_case     : [[fallthrough]];
 		case "--help"_case : print_type_help(stdout); return 0;
-		default: print_type_help(stderr); return 1;
+	}
+
+	try
+	{
+		fractal_type = make_fractal_type(type, dim_a, dim_b, dim_c, valueD, valueE, params);
+	}
+	catch (const std::invalid_argument& e)
+	{
+		fprintf(stderr, "%s\n", e.what());
+		return 2;
 	}
 
 	if (case_hash(format) == "3df"_case && csize <= 0)
