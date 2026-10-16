@@ -1,3 +1,8 @@
-*.cc text eol=lf
-*.hh text eol=lf
-CMakeLists.txt text eol=lf
+# every text file: Unix line endings in the working tree on any platform
+* text=auto eol=lf
+
+# binary files: no conversion
+*.png binary
+*.gif binary
+*.jpg binary
+*.mp4 binary

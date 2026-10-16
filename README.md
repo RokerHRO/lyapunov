@@ -1,13 +1,32 @@
 # lyapunov – a 2D/3D Lyapunov fractal generator
-<img src="https://raw.githubusercontent.com/RokerHRO/lyapunov/master/seq-AB.png" width="250" height="250" align="right" />
+<img src="seq-AB.png" width="250" height="250" align="right" />
 
 These programs are in this repo:
 ## lyapunov
 ### Requirements
-(none, except a libc with getopt() support)
+* a C++20 compiler with OpenMP: `g++` >= 11 (OpenMP/libgomp is included); with clang install `libomp` additionally
+* `cmake` >= 3.20
+* a libc with `getopt()` support
+* optional: Python 3 + Pillow (for the tour script `scripts/cube_tour.py`), `ffmpeg` (for GIF/MP4 previews)
+
+Install the packages:
+* Debian/Ubuntu: `sudo apt install cmake g++ make` (optionally `sudo apt install python3-pil ffmpeg`)
+* Fedora: `sudo dnf install cmake g++ make` (optionally `sudo dnf install python3-pip ffmpeg`)
+* Arch: `sudo pacman -S cmake gcc make` (optionally `sudo pacman -S python-pil ffmpeg`)
+* FreeBSD: `pkg install cmake` (the base clang has C++20 and OpenMP/libomp)
+* OpenBSD: `pkg_add cmake gcc` (the base clang has no OpenMP at all, so use the gcc from the ports, e.g. `CC=gcc15 CXX=g++15 cmake ...`)
+* NetBSD: `pkgin install cmake` (and `pkgin install gcc` if the base clang lacks OpenMP, then `CC=... CXX=... cmake ...`)
+* macOS: `brew install cmake gcc` plus the Xcode Command Line Tools (`xcode-select --install`); the Apple clang has no OpenMP, so use the Homebrew g++, e.g. `CC=gcc-14 CXX=g++-14 cmake ...`
+* Windows: MSYS2 — `pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake make` (run the build in the UCRT64 shell; the MinGW g++ has OpenMP). Alternatively use the MinGW toolchain bundled with CLion.
+
 ### Compilation
 
-Use `cmake`.
+Use `cmake`:
+```
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+```
+The executables end up in `build/`: `lyapunov`, `gen-ab-sequences`, `gen_zoom`, `gen_poses`, `lissa_overview`.
 
 ### Running
 ```
@@ -42,7 +61,7 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
         -E value  : value for 5th dimension (default 3.000000)
 ```
 
-<img src="https://raw.githubusercontent.com/RokerHRO/lyapunov/master/seq-ABAAAAB.png" width="250" height="250" align="right" />
+<img src="seq-ABAAAAB.png" width="250" height="250" align="right" />
 
 #### Fractal types
 * `plain`  : just a 2D image or an animation of a linear flight through the 3D cube
