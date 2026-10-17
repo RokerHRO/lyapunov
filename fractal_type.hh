@@ -109,15 +109,202 @@ public:
 	virtual void dumpPathData(std::ostream&, unsigned) const {}
 };
 
+// a distortion applied to the normalized image window coordinates before the
+// flight mapping: u = (column+0.5)/b.size (horizontal), v = (line+0.5)/a.size
+// (vertical), both in [0,1]. Any warp can be combined with any flight path.
+class Warp
+{
+public:
+	virtual ~Warp() = default;
+
+	virtual void warp(double& u, double& v, unsigned frame, unsigned frameCount, unsigned line, unsigned column, unsigned a_size, unsigned b_size) const = 0;
+	[[nodiscard]] virtual const char* name() const = 0;
+};
+
+namespace detail
+{
+// 2D Perlin gradient noise, value roughly in [-1, 1]
+struct Perlin
+{
+	explicit Perlin(unsigned seed);
+	[[nodiscard]] double noise(double x, double y) const;
+
+private:
+	int perm[512] = {};
+};
+}
+
+// sinusoidal warp of the window (same shape and parameters as the "wavy"
+// fractal type, applied in window coordinates): the A direction (v) wobbles
+// along the columns, the B direction (u) along the lines
+// _params: <freq_a>,<amp_a>,<phase_a_deg>[,<freq_b>,<amp_b>,<phase_b_deg>]
+// (frequency = waves per axis, amplitude = fraction of the window size,
+// phase in degrees; the B triple defaults to the A values; default 1,0.02,0)
+class WavyWarp : public Warp
+{
+public:
+	explicit WavyWarp(const std::vector<double>& params)
+	: freq_a(params.size()>0 ? params[0] : 1.0)
+	, amp_a(params.size()>1 ? params[1] : 0.02)
+	, phase_a(2.0*M_PI * (params.size()>2 ? params[2] : 0.0) / 360.0)
+	, freq_b(params.size()>3 ? params[3] : freq_a)
+	, amp_b(params.size()>4 ? params[4] : amp_a)
+	, phase_b(params.size()>5 ? 2.0*M_PI*params[5]/360.0 : phase_a)
+	{}
+
+	void warp(double& u, double& v, unsigned, unsigned, unsigned line, unsigned column, unsigned a_size, unsigned b_size) const override;
+	[[nodiscard]] const char* name() const override { return "wavy"; }
+
+private:
+	const double freq_a, amp_a, phase_a;
+	const double freq_b, amp_b, phase_b;
+};
+
+// Perlin-noise warp of the window (same shape and parameters as the "noise"
+// fractal type, applied in window coordinates)
+// _params: <frequency>,<amp_a>,<amp_b>[,<seed>] (frequency = noise cells per
+// window axis, amplitude = fraction of the window size; default 3,0.333,0.333,0)
+class NoiseWarp : public Warp
+{
+public:
+	explicit NoiseWarp(const std::vector<double>& params)
+	: freq(params.size()>0 ? params[0] : 3.0)
+	, amp_a(params.size()>1 ? params[1] : 0.333)
+	, amp_b(params.size()>2 ? params[2] : 0.333)
+	, perlin(params.size()>3 ? unsigned(params[3]) : 0)
+	{}
+
+	void warp(double& u, double& v, unsigned, unsigned, unsigned line, unsigned column, unsigned a_size, unsigned b_size) const override;
+	[[nodiscard]] const char* name() const override { return "noise"; }
+
+private:
+	const double freq, amp_a, amp_b;
+	const detail::Perlin perlin;
+};
+
+// reflection of the window about a fixed circle in the window plane
+// (same shape as the "inversion" fractal type, applied in window coordinates)
+// _params: [center_a,center_b[,radius]] as fractions of the window size
+// (default: window center 0.5,0.5, radius half of the window height 0.5)
+class InversionWarp : public Warp
+{
+public:
+	explicit InversionWarp(const std::vector<double>& params)
+	: center_v(params.size()>0 ? params[0] : 0.5)
+	, center_u(params.size()>1 ? params[1] : 0.5)
+	, radius(params.size()>2 ? params[2] : 0.5)
+	{}
+
+	void warp(double& u, double& v, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned) const override;
+	[[nodiscard]] const char* name() const override { return "inversion"; }
+
+private:
+	const double center_v, center_u, radius;
+};
+
+// twist: rotates every window point about the window center by an angle
+// proportional to the square of its distance from the center: the center
+// stays fixed, the border winds up (twirl)
+// _params: <twist_degrees>[,radius] (default 180, 0.7071: the full twist is
+// reached at the given distance, default: the window corner)
+class TwistWarp : public Warp
+{
+public:
+	explicit TwistWarp(const std::vector<double>& params)
+	: twist(2.0*M_PI * (params.size()>0 ? params[0] : 180.0) / 360.0)
+	, radius(params.size()>1 ? params[1] : 0.7071)
+	{}
+
+	void warp(double& u, double& v, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned) const override;
+	[[nodiscard]] const char* name() const override { return "twist"; }
+
+private:
+	const double twist;  // full twist angle in radians (at r = radius)
+	const double radius; // distance (in window units) where the full twist is reached
+};
+
+// swirl: a vortex about the window center: the twist angle grows
+// exponentially with the distance from the center (the center is almost
+// undisturbed, the border is strongly wound up)
+// _params: <twist_degrees>[,radius][,decay] (default 180, 0.7071, 3):
+// theta(r) = twist * exp(-decay * (1 - min(r, radius)/radius))
+class SwirlWarp : public Warp
+{
+public:
+	explicit SwirlWarp(const std::vector<double>& params)
+	: twist(2.0*M_PI * (params.size()>0 ? params[0] : 180.0) / 360.0)
+	, radius(params.size()>1 ? params[1] : 0.7071)
+	, decay(params.size()>2 ? params[2] : 3.0)
+	{}
+
+	void warp(double& u, double& v, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned) const override;
+	[[nodiscard]] const char* name() const override { return "swirl"; }
+
+private:
+	const double twist;  // twist angle in radians (at r = radius)
+	const double radius; // distance (in window units) where the full twist is reached
+	const double decay;  // exponential falloff toward the center
+};
+
+// mobius: a Moebius transform of the window (Poincare-disk automorphism,
+// "hyperbolic lens"): the content is pulled toward (tx,ty) while the opposite
+// side is compressed conformally; unlike inversion the inside stays inside
+// _params: [tx,ty][,radius] (default 0.15,0,0.5), in fractions of the window
+// size; |t| must stay inside the unit circle in the normalized plane
+// (throw otherwise)
+class MobiusWarp : public Warp
+{
+public:
+	explicit MobiusWarp(const std::vector<double>& params)
+	: tx(params.size()>0 ? params[0] : 0.15)
+	, ty(params.size()>1 ? params[1] : 0.0)
+	, radius(params.size()>2 ? params[2] : 0.5)
+	{
+		const double a = tx / radius, b = ty / radius;
+		if (a*a + b*b >= 1.0)
+			throw std::invalid_argument("mobius: the lens center (tx,ty) must be inside the unit circle in the normalized plane (got "
+				+ std::to_string(std::sqrt(a*a + b*b)) + ")");
+	}
+
+	void warp(double& u, double& v, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned) const override;
+	[[nodiscard]] const char* name() const override { return "mobius"; }
+
+private:
+	const double tx, ty, radius;
+};
+
+// zoom warp of the window about its center over the animation (same shape and
+// parameters as the "zoom" fractal type, applied in window coordinates)
+// _params: <total_zoom_factor>,<total_rotation_degrees> (default 0.1,360)
+class ZoomWarp : public Warp
+{
+public:
+	explicit ZoomWarp(const std::vector<double>& params)
+	: zoom_total(params.size()>0 ? params[0] : 0.1)
+	, rot_total(params.size()>1 ? params[1] * M_PI/180.0 : 2*M_PI)
+	, cache_frame(~0u)
+	{}
+
+	void warp(double& u, double& v, unsigned frame, unsigned frameCount, unsigned, unsigned, unsigned, unsigned) const override;
+	[[nodiscard]] const char* name() const override { return "zoom"; }
+
+private:
+	const double zoom_total, rot_total;
+	// per-frame coefficients s*sin(theta), s*cos(theta), cached by warp()
+	mutable unsigned cache_frame;
+	mutable double s_sin = 1.0, s_cos = 1.0;
+};
+
 // generic flight: a FlightPath provides the image window pose in the unit
 // ABC cube per frame, each pixel is the affine combination
 // corner + u_axis*u + v_axis*v scaled to the a/b/c ranges
 class Flight : public SimpleFractalType
 {
 public:
-	Flight(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e, std::unique_ptr<FlightPath>&& _path)
+	Flight(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e, std::unique_ptr<FlightPath>&& _path, std::unique_ptr<Warp>&& _warp = nullptr)
 	: SimpleFractalType(_a, _b, _c, _d, _e)
 	, path(std::move(_path))
+	, warp(std::move(_warp))
 	{}
 
 	void per_image(double values[5], unsigned frame) const override;
@@ -127,6 +314,7 @@ public:
 
 private:
 	std::unique_ptr<FlightPath> path;
+	std::unique_ptr<Warp> warp; // optional distortion of the window (nullptr: none)
 	// cached by per_image (called once per frame before the parallel pixel loop)
 	mutable WindowPose pose{};
 	mutable unsigned pose_frame{~0u};
@@ -360,25 +548,11 @@ private:
 	const double k_a, k_b;
 };
 
-namespace detail
-{
-// 2D Perlin gradient noise, value roughly in [-1, 1]
-struct Perlin
-{
-	explicit Perlin(unsigned seed);
-	[[nodiscard]] double noise(double x, double y) const;
-
-private:
-	int perm[512] = {};
-};
-}
-
 class Noise : public SimpleFractalType
 {
 public:
 	// _params: frequency (noise cells per image axis), amplitude_a, amplitude_b (ratio of image size),
 	//          [seed] (default 3, 0.333, 0.333, 0)
-	// the amplitude grows linearly from 0 to the given value over the frames (single frame: full amplitude)
 	Noise(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e, const std::vector<double>& _params)
 	: SimpleFractalType(_a, _b, _c, _d, _e)
 	, freq(_params.size()>0 ? _params[0] : 3.0)
@@ -417,9 +591,16 @@ private:
 
 // factory: creates the fractal type named by the command line string
 // (case-insensitive). Throws std::invalid_argument for an unknown type or
-// invalid parameters.
+// invalid parameters. _warp is only used by the flight types (6sides,
+// wander, rotor), nullptr for all other types.
 std::unique_ptr<FractalType> make_fractal_type(std::string_view type,
 	const Dimension& a, const Dimension& b, const Dimension& c, double d, double e,
+	const std::vector<double>& params, std::unique_ptr<Warp> warp = nullptr);
+
+// factory: creates the warp named by the command line string (case-
+// insensitive). Throws std::invalid_argument for an unknown warp or invalid
+// parameters.
+std::unique_ptr<Warp> make_warp(std::string_view warp,
 	const std::vector<double>& params);
 
 // factory: creates the flight path (window poses only) named by the command
