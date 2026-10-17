@@ -272,10 +272,12 @@ void Flight::per_line(double /*values*/[5], unsigned /*frame*/, unsigned /*line*
 	// A, B and C all depend on line and column, see per_pixel
 }
 
-void Flight::per_pixel(double values[5], unsigned /*frame*/, unsigned line, unsigned column) const
+void Flight::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
 {
-	const double u = (column+0.5) / b.size;
-	const double v = (line+0.5) / a.size;
+	double u = (column+0.5) / b.size;
+	double v = (line+0.5) / a.size;
+	if (warp)
+		warp->warp(u, v, frame, c.size, line, column, a.size, b.size);
 	const double A01 = pose.corner.x + u*pose.u_axis.x + v*pose.v_axis.x;
 	const double B01 = pose.corner.y + u*pose.u_axis.y + v*pose.v_axis.y;
 	const double C01 = pose.corner.z + u*pose.u_axis.z + v*pose.v_axis.z;
@@ -397,6 +399,92 @@ WindowPose RotorPath::poseAt(unsigned frame, unsigned frameCount) const
 	return {corner, u_axis, v_axis};
 }
 
+
+void WavyWarp::warp(double& u, double& v, unsigned, unsigned, unsigned line, unsigned column, unsigned a_size, unsigned b_size) const
+{
+	v += amp_a * sin(2.0*M_PI*freq_a*column/b_size - phase_a);
+	u += amp_b * sin(2.0*M_PI*freq_b*line/a_size - phase_b);
+}
+
+void NoiseWarp::warp(double& u, double& v, unsigned, unsigned, unsigned line, unsigned column, unsigned a_size, unsigned b_size) const
+{
+	const double x = (column + 0.5) / b_size * freq;
+	const double y = (line + 0.5) / a_size * freq;
+	v += amp_a * perlin.noise(x, y);
+	u += amp_b * perlin.noise(x, y + 52.0);
+}
+
+void InversionWarp::warp(double& u, double& v, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned) const
+{
+	const double du = u - center_u;
+	const double dv = v - center_v;
+	const double d2 = du*du + dv*dv;
+	if (d2 > 1e-300) // the center itself is fixed (its image is at infinity)
+	{
+		const double scale = radius*radius / d2;
+		u = center_u + scale*du;
+		v = center_v + scale*dv;
+	}
+}
+
+void TwistWarp::warp(double& u, double& v, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned) const
+{
+	if (twist == 0.0)
+		return; // zero twist is the identity (bit-exact)
+	const double du = u - 0.5, dv = v - 0.5;
+	const double ang = twist * (du*du + dv*dv) / (radius*radius);
+	const double s = std::sin(ang), c = std::cos(ang);
+	u = 0.5 + c*du - s*dv;
+	v = 0.5 + s*du + c*dv;
+}
+
+void SwirlWarp::warp(double& u, double& v, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned) const
+{
+	if (twist == 0.0)
+		return; // zero twist is the identity (bit-exact)
+	const double du = u - 0.5, dv = v - 0.5;
+	const double r = std::sqrt(du*du + dv*dv);
+	const double t = std::min(r / radius, 1.0);
+	const double ang = twist * std::exp(-decay * (1.0 - t));
+	const double s = std::sin(ang), c = std::cos(ang);
+	u = 0.5 + c*du - s*dv;
+	v = 0.5 + s*du + c*dv;
+}
+
+void MobiusWarp::warp(double& u, double& v, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned) const
+{
+	if (tx == 0.0 && ty == 0.0)
+		return; // no lens is the identity (bit-exact)
+	// window coordinates, centered and scaled by the lens radius
+	const double x = (u - 0.5) / radius, y = (v - 0.5) / radius;
+	// lens center t in the same normalized plane
+	const double a = tx / radius, b = ty / radius;
+	// w = (z - t) / (1 - conj(t) * z)  with z = x + iy, t = a + ib
+	const double nr = x - a, ni = y - b;
+	const double dn_r = 1.0 - (a*x + b*y);
+	const double dn_i = -(a*y - b*x);
+	const double d2 = dn_r*dn_r + dn_i*dn_i;
+	u = 0.5 + radius * (nr*dn_r + ni*dn_i) / d2;
+	v = 0.5 + radius * (ni*dn_r - nr*dn_i) / d2;
+}
+
+void ZoomWarp::warp(double& u, double& v, unsigned frame, unsigned frameCount, unsigned, unsigned, unsigned, unsigned) const
+{
+	if (frame != cache_frame)
+	{
+		const double span = (frameCount > 1) ? double(frameCount - 1) : 1.0;
+		const double t = (frameCount > 1) ? double(frame) / span : 0.0;
+		const double s = pow(zoom_total, t);
+		const double theta = rot_total * t;
+		s_sin = s * sin(theta);
+		s_cos = s * cos(theta);
+		cache_frame = frame;
+	}
+	const double x = u - 0.5;
+	const double y = v - 0.5;
+	u = 0.5 + s_cos*x - s_sin*y;
+	v = 0.5 + s_sin*x + s_cos*y;
+}
 
 void Circle::per_image(double values[5], unsigned frame) const
 {
@@ -605,13 +693,12 @@ void Noise::per_line(double /*values*/[5], unsigned /*frame*/, unsigned /*line*/
 	// A depends on both line and column (2D noise)
 }
 
-void Noise::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
+void Noise::per_pixel(double values[5], unsigned /*frame*/, unsigned line, unsigned column) const
 {
 	const double x = (column + 0.5) / b.size * freq;
 	const double y = (line + 0.5) / a.size * freq;
-	const double t = (c.size > 1) ? double(frame) / (c.size - 1) : 1.0;
-	values[0] = a.min + (a.max-a.min)/a.size*(line+0.5) + amp_a * t * perlin.noise(x, y);
-	values[1] = b.min + (b.max-b.min)/b.size*(column+0.5) + amp_b * t * perlin.noise(x, y + 52.0);
+	values[0] = a.min + (a.max-a.min)/a.size*(line+0.5) + amp_a * perlin.noise(x, y);
+	values[1] = b.min + (b.max-b.min)/b.size*(column+0.5) + amp_b * perlin.noise(x, y + 52.0);
 }
 
 void Inversion::per_pixel(double values[5], unsigned /*frame*/, unsigned line, unsigned column) const
@@ -634,14 +721,14 @@ void Inversion::per_pixel(double values[5], unsigned /*frame*/, unsigned line, u
 
 std::unique_ptr<FractalType> make_fractal_type(std::string_view type,
 	const Dimension& a, const Dimension& b, const Dimension& c, double d, double e,
-	const std::vector<double>& params)
+	const std::vector<double>& params, std::unique_ptr<Warp> warp)
 {
 	switch (case_hash(type))
 	{
-		case "plain"_case: return std::make_unique<SimpleFractalType>(a, b, c, d, e);
-		case "6sides"_case: return std::make_unique<Flight>(a, b, c, d, e, std::make_unique<SixSidePath>(params));
-		case "wander"_case: return std::make_unique<Flight>(a, b, c, d, e, std::make_unique<WanderPath>(params));
-		case "rotor"_case: return std::make_unique<Flight>(a, b, c, d, e, std::make_unique<RotorPath>(params));
+		case "plain"_case: return std::make_unique<SimpleFractalType>(a, b, c, d, e); // warp is only valid for the flight types, checked by the caller
+		case "6sides"_case: return std::make_unique<Flight>(a, b, c, d, e, std::make_unique<SixSidePath>(params), std::move(warp));
+		case "wander"_case: return std::make_unique<Flight>(a, b, c, d, e, std::make_unique<WanderPath>(params), std::move(warp));
+		case "rotor"_case: return std::make_unique<Flight>(a, b, c, d, e, std::make_unique<RotorPath>(params), std::move(warp));
 		case "circle"_case: return std::make_unique<Circle>(a, b, c, d, e);
 		case "sphere"_case: return std::make_unique<Sphere>(a, b, c, d, e, params);
 		case "tileable"_case: return std::make_unique<Tileable>(a, b, c, d, e);
@@ -660,6 +747,30 @@ std::unique_ptr<FractalType> make_fractal_type(std::string_view type,
 		case "inversion"_case: return std::make_unique<Inversion>(a, b, c, d, e, params);
 	}
 	throw std::invalid_argument(std::string("unknown fractal type \"") + std::string(type) + "\" (see -t help)");
+}
+
+std::unique_ptr<Warp> make_warp(std::string_view warp,
+	const std::vector<double>& params)
+{
+	switch (case_hash(warp))
+	{
+		case "wavy"_case:
+			if (params.size() > 0 && params[0] <= 0.0)
+				throw std::invalid_argument("wavy: frequency_a must be > 0 (got " + std::to_string(params[0]) + ").");
+			if (params.size() > 3 && params[3] <= 0.0)
+				throw std::invalid_argument("wavy: frequency_b must be > 0 (got " + std::to_string(params[3]) + ").");
+			return std::make_unique<WavyWarp>(params);
+		case "noise"_case:
+			if (params.size() > 0 && params[0] <= 0.0)
+				throw std::invalid_argument("noise: frequency must be > 0 (got " + std::to_string(params[0]) + ").");
+			return std::make_unique<NoiseWarp>(params);
+		case "inversion"_case: return std::make_unique<InversionWarp>(params);
+		case "mobius"_case: return std::make_unique<MobiusWarp>(params);
+		case "swirl"_case: return std::make_unique<SwirlWarp>(params);
+		case "twist"_case: return std::make_unique<TwistWarp>(params);
+		case "zoom"_case: return std::make_unique<ZoomWarp>(params);
+	}
+	throw std::invalid_argument(std::string("unknown warp \"") + std::string(warp) + "\" (supported: wavy, noise, inversion, mobius, swirl, twist, zoom)");
 }
 
 std::unique_ptr<FlightPath> make_flight_path(std::string_view type,

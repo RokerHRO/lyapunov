@@ -48,6 +48,11 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
                      Can contain template patterns: {s}: sequence, {i}: iter, {f}: frame_nr
         -O format  : either "pnm" for image (series) or "3df" for 3D voxel file (default: "pnm")
 
+        -p params[,...] : comma-separated list of additional numerical parameters for -t
+        -w warp    : warp of the image window, only with the flight types 6sides, wander, rotor
+                     (supported: wavy, noise, inversion, zoom, see "Warps" below)
+        -P params[,...] : comma-separated list of numerical parameters for -w
+
         -c cx:cy:x_size : center coordinates and size.
            The x, X, y and Y values will be calculated from them automatically:
         -x min_x  : minimum x value (default: 2.400000)
@@ -74,9 +79,56 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
 * `tileable-loop` : like `tileable`, plus C+D trace a circle over the frames (`-f <frames>`), so the animation loops seamlessly (frame N = frame 0).
 * `zoom` : animated fly-through into the (A,B) plane: over the whole animation the rectangle is scaled about its center (total zoom factor, final frame scale relative to frame 0) and rotated (total degrees), configured via `-p <total_zoom>,<total_rotation>` (default `0.1,360`).
 * `wavy` : the plain (A,B) plane with a sinusoidal warp (A wobbles along the columns, B along the lines, woven wave pattern), configured via `-p <freq_a>,<amp_a>,<phase_a>[,<freq_b>,<amp_b>,<phase_b>]`: frequency = number of waves per image axis (1 = one wave), amplitude = fraction of the image size (0.02 by default), phase in degrees (360 = one wave); the B triple defaults to the A values (default `1,0.02,0`).
-* `noise` : the plain (A,B) plane warped by 2D Perlin noise, configured via `-p <frequency>,<amp_a>,<amp_b>[,<seed>]`: frequency = number of noise cells per image axis (1 = one cell), amplitude = fraction of the image size (0.333 by default), optional seed (default `3,0.333,0.333,0`). In animations the amplitude grows linearly from 0 to the given value over the frames (single frame: full amplitude).
+* `noise` : the plain (A,B) plane warped by 2D Perlin noise, configured via `-p <frequency>,<amp_a>,<amp_b>[,<seed>]`: frequency = number of noise cells per image axis (1 = one cell), amplitude = fraction of the image size (0.333 by default), optional seed (default `3,0.333,0.333,0`).
 * `inversion` : the plain (A,B) plane, but the points are reflected about a fixed circle: for each point the distance `d` and angle from the circle center are computed, then projected to the radius `R²/d` at the same angle (`P' = C + R²·(P−C)/|P−C|²`), configured via `-p [center_a,center_b[,radius]]` (default: window center, radius half of the A range, i.e. half the image size).
 
+#### Warps (combine with a flight type via `-w`)
+
+A warp distorts the image window (in normalized window coordinates) before the flight mapping, so every warp can be combined with every flight type (`6sides`, `wander`, `rotor`):
+
+```
+lyapunov -t <flight> -w <warp> -p <flight params> -P <warp params>
+```
+
+The warps have the same shape and parameter meaning as the plain-plane types above, with the amplitudes/center/radius given as fractions of the window size:
+
+* `wavy` : sinusoidal warp — `-P <freq_a>,<amp_a>,<phase_a_deg>[,<freq_b>,<amp_b>,<phase_b_deg>]` (default `1,0.02,0`)
+* `noise` : 2D Perlin noise warp — `-P <frequency>,<amp_a>,<amp_b>[,<seed>]` (default `3,0.333,0.333,0`)
+* `inversion` : reflection of the window about a fixed circle — `-P [center_a,center_b[,radius]]` (default `0.5,0.5,0.5`: window center, radius half of the window height)
+* `mobius` : hyperbolic lens (Poincare-disk Moebius transform): the content is pulled toward `(tx,ty)` while the opposite side is compressed conformally (unlike inversion, the inside stays inside) — `-P [tx,ty][,radius]` (default `0.15,0,0.5`)
+* `swirl` : vortex about the window center, the twist angle grows exponentially with the distance (the center is almost undisturbed, the border is strongly wound up) — `-P <twist_degrees>[,radius][,decay]` (default `180,0.7071,3`)
+* `twist` : rotates the window about its center by an angle proportional to the square of the distance (the center stays fixed, the border winds up) — `-P <twist_degrees>[,radius]` (default `180,0.7071`: full twist at the window corner)
+* `zoom` : scale and rotate the window about its center over the animation — `-P <total_zoom>,<total_rotation_degrees>` (default `0.1,360`)
+
+Warp examples (all: one 6-sides cruise frame, ease 2, frame 128 of 512, sequence ABBCAC; generated at 512x512 and scaled down to 50%):
+
+<img src="img/warp-twist-ABBCAC.png" width="256" height="256" align="right" />
+
+`lyapunov -W 512 -H 512 -i 400 -s ABBCAC -t 6sides -p 0,2 -f 512 -G 128:129 -w twist -o twist-{f}`
+
+<br clear="all" />
+
+<img src="img/warp-swirl-ABBCAC.png" width="256" height="256" align="right" />
+
+`lyapunov -W 512 -H 512 -i 400 -s ABBCAC -t 6sides -p 0,2 -f 512 -G 128:129 -w swirl -P 180,0.7071,1 -o swirl-{f}`
+
+<br clear="all" />
+
+<img src="img/warp-mobius-ABBCAC.png" width="256" height="256" align="right" />
+
+`lyapunov -W 512 -H 512 -i 400 -s ABBCAC -t 6sides -p 0,2 -f 512 -G 128:129 -w mobius -o mobius-{f}`
+
+<br clear="all" />
+
+The rotation angle theta(r) of the `twist` and `swirl` warps as a function of the distance r from the window center (`scripts/warp_theta.py`, SVG):
+
+<img src="img/warp-theta-example.svg" width="256" height="256" align="right" />
+
+`python scripts/warp_theta.py -t 90 -t 180 -t 360 -s 180,0.7071,1 -s 180,0.7071,3 -s 180,0.7071,6 -o img/warp-theta-example.svg`
+
+(three twist curves: 90, 180 and 360 degrees; three swirl curves: 180 degrees with decay 1, 3 and 6; radius 0.7071 = the window corner in all curves)
+
+<br clear="all" />
 
 #### File formats
 * ppm : portable pixmap image, or series of images
@@ -207,6 +259,19 @@ The (A,B) slice at `C=0.5` (A vertical, B horizontal in the image) spins in plac
 
 * fractal: [A axis](img/rotor-a.mp4) &nbsp; [space diagonal](img/rotor-diag.mp4)
 * pose tour (window in the wireframe cube): [A axis](img/rotor-a-tour.mp4) &nbsp; [space diagonal](img/rotor-diag-tour.mp4)
+
+<br clear="all" />
+
+#### Warped flight (warp + flight combination)
+`lyapunov -W 160 -H 160 -i 400 -s ABBCAC -f 96 -t 6sides -p 0,2 -w inversion -o warp-{f}`
+
+<img src="img/anim-6sides-inversion-ABBCAC.gif" align="right" />
+
+The 6-sides cruise (`-t 6sides`, ease 2) with the image window reflected about a circle in the window plane (`-w inversion`, default circle: window center, radius half of the window height). Any warp (`wavy`, `noise`, `inversion`, `zoom`) can be combined with any flight type (`6sides`, `wander`, `rotor`); the flight parameters go to `-p`, the warp parameters to `-P`.
+
+The rotor (A axis, one full turn) with a Perlin noise warp, 512x512, 256 frames:
+
+`lyapunov -W 512 -H 512 -i 400 -s ABBCAC -f 256 -t rotor -w noise -P 3,0.1,0.1,5 -o rotor-noise-{f}` &rarr; [rotor-noise](img/rotor-noise.mp4)
 
 <br clear="all" />
 

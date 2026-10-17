@@ -54,6 +54,13 @@ Linux: g++/clang++).
 4. README: bullet in the "Fractal types" list + an "Examples" section with
    an illustration (GIF: 160x160, 25 fps, ffmpeg `palettegen`/`paletteuse`;
    window tours: `gen_poses` + `scripts/cube_tour.py` -> mp4) and link it
+5. New **warp** (window distortion, usable via `-w` with every flight
+   type): class implementing `Warp::warp(u, v, ...)` in `fractal_type.hh`,
+   working in normalized window coordinates (u = column/b.size horizontal,
+   v = line/a.size vertical, both in [0,1]), `case` in `make_warp()`,
+   help text + README "Warps" bullet. Warps are applied in
+   `Flight::per_pixel` before the pose mapping; they must not change the
+   result when their amplitude is 0 (bit-exact).
 
 ## Naming of committed media (`img/`)
 
@@ -65,6 +72,12 @@ Linux: g++/clang++).
 - Render small frames (e.g. 32x32, `-f 4`) and compare bit-exactly
   (hash compare); for math changes cross-check against an independent
   Python implementation before scaling up.
+- Before changing `Flight`/`FlightPath`/`Warp` code: rebuild the previous
+  binary and keep it (e.g. `lyapunov-baseline.exe` in the temp build
+  area); after the change, render the same command lines with both
+  binaries and byte-compare (all flight types, single frame and
+  animation). Chaotic output amplifies 1-ULP differences, so
+  "visually the same" is NOT acceptable.
 - `gen_poses` is the source of truth for window poses; the tour rendering
   must stay driven by pose files (no duplicate path math in Python).
 - Never write generated output into the repository; use a temp directory.

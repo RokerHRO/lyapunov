@@ -56,6 +56,8 @@ int gend = 0;   // one past the last frame to render (0: render all frames)
 int nmax = 1000;                /* number of rounds */
 
 std::vector<double> params;
+std::string warp_name;
+std::vector<double> warp_params;
 
 FILE* of = nullptr;
 std::unique_ptr<FractalType> fractal_type;
@@ -374,9 +376,25 @@ void print_type_help(FILE* f)
 		"\tnoise : plain (A,B) plane warped by 2D Perlin noise\n"
 		"\t            -p <frequency>,<amp_a>,<amp_b>[,<seed>]  (frequency = noise cells per axis, amplitude =\n"
 		"\t                 fraction of image size; default 3,0.333,0.333,0)\n"
-		"\t            the amplitude grows linearly from 0 to the given value over the frames (single frame: full amplitude)\n"
 		"\tinversion : plain (A,B) plane, but the points are reflected about a fixed circle (P' = C + R^2*(P-C)/|P-C|^2)\n"
 		"\t            -p [center_a,center_b[,radius]]  (default: window center, half of the A range)\n"
+		"\n"
+		"Warps (combine with a flight type via -w, parameters via -P):\n"
+		"\ta distortion of the image window, applied before the flight mapping, so it\n"
+		"\tcan be combined with 6sides, wander and rotor:\n"
+		"\t-t <flight> -w <warp> -p <flight params> -P <warp params>\n"
+		"\twavy      : sinusoidal warp (same parameters as the wavy type, amplitudes as a fraction of the window)\n"
+		"\tnoise     : 2D Perlin noise warp (same parameters as the noise type, amplitudes as a fraction of the window)\n"
+		"\tinversion : reflection of the window about a fixed circle (center and radius as a fraction of the window,\n"
+		"\t             default 0.5,0.5,0.5)\n"
+		"\tmobius    : hyperbolic lens (Poincare-disk Moebius transform): pulls the content toward (tx,ty),\n"
+		"\t             the opposite side is compressed conformally -P [tx,ty][,radius]  (default 0.15,0,0.5)\n"
+		"\tswirl     : vortex about the window center, twist angle grows exponentially with the distance\n"
+		"\t             (center almost undisturbed, border strongly wound up)\n"
+		"\t             -P <twist_degrees>[,radius][,decay]  (default 180,0.7071,3)\n"
+		"\ttwist     : rotate the window about its center, angle proportional to the square of the distance\n"
+		"\t             (center fixed, border winds up) -P <twist_degrees>[,radius]  (default 180,0.7071)\n"
+		"\tzoom      : scale and rotate the window about its center over the animation (same parameters as the zoom type)\n"
 	);
 }
 
@@ -401,11 +419,13 @@ std::vector<double> parse_params(const char* p)
 	}
 	return params;
 }
+
+
 int main(int argc, char** argv)
 {
 	const auto program_start = std::chrono::system_clock::now();
 	int a;
-	while( (a=getopt(argc, argv, "W:H:f:c:x:y:z:X:Y:Z:s:i:o:O:t:C:D:E:F:p:G:")) != -1 )
+	while( (a=getopt(argc, argv, "W:H:f:c:x:y:z:X:Y:Z:s:i:o:O:t:C:D:E:F:p:G:w:P:")) != -1 )
 	{
 		switch(a)
 		{
@@ -443,6 +463,8 @@ int main(int argc, char** argv)
 			case 'E': valueE = atof(optarg); setE = true; break;
 			case 'F': valueF = atof(optarg); setF = true; break;
 			case 'p': params = parse_params(optarg); break;
+			case 'w': warp_name = optarg;   break;
+			case 'P': warp_params = parse_params(optarg); break;
 			case 'G':
 			{
 				const char* colon = strchr(optarg, ':');
@@ -490,7 +512,10 @@ int main(int argc, char** argv)
 					"\t-D value  : value for 4th dimension (default %f)\n"
 					"\t-E value  : value for 5th dimension (default %f)\n"
 					"\n"
-					"\t-p params[,...] : comma-separated list of additional numerical parameters\n"
+					"\t-p params[,...] : comma-separated list of additional numerical parameters for -t\n"
+					"\t-w warp    : warp of the image window (only with the flight types 6sides, wander, rotor;\n"
+					"\t             supported: wavy, noise, inversion, zoom)\n"
+					"\t-P params[,...] : comma-separated list of numerical parameters for -w\n"
 					, argv[0], bsize, asize, seq.c_str(), nmax,
 					type.c_str(), format.c_str(),
 					bmin, bmax, amin, amax, cmin, cmax, cmin, valueD, valueE
@@ -561,6 +586,18 @@ int main(int argc, char** argv)
 			fprintf(stderr, ", %f", params[u]);
 		}
 	}
+	if (!warp_name.empty())
+	{
+		fprintf(stderr, " W=%s", warp_name.c_str());
+		if (!warp_params.empty())
+		{
+			fprintf(stderr, " WP=%f", warp_params[0]);
+			for (unsigned u=1; u<warp_params.size(); ++u)
+			{
+				fprintf(stderr, ", %f", warp_params[u]);
+			}
+		}
+	}
 
 	fputc('\n', stderr);
 
@@ -584,9 +621,23 @@ int main(int argc, char** argv)
 		case "--help"_case : print_type_help(stdout); return 0;
 	}
 
+	if (!warp_name.empty())
+	{
+		switch (case_hash(type))
+		{
+			case "6sides"_case: [[fallthrough]];
+			case "wander"_case: [[fallthrough]];
+			case "rotor"_case:  break;
+			default:
+				fprintf(stderr, "Warp \"-w %s\" can only be combined with the flight types 6sides, wander and rotor (got type \"%s\").\n", warp_name.c_str(), type.c_str());
+				return 2;
+		}
+	}
+
 	try
 	{
-		fractal_type = make_fractal_type(type, dim_a, dim_b, dim_c, valueD, valueE, params);
+		std::unique_ptr<Warp> warp = warp_name.empty() ? nullptr : make_warp(warp_name, warp_params);
+		fractal_type = make_fractal_type(type, dim_a, dim_b, dim_c, valueD, valueE, params, std::move(warp));
 	}
 	catch (const std::invalid_argument& e)
 	{
