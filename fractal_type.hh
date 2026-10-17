@@ -11,7 +11,7 @@
 
 struct Dimension
 {
-	unsigned size;
+	unsigned size; // in pixel
 	double min;
 	double max;
 };
@@ -195,5 +195,39 @@ private:
 	// per-frame rotation/scale coefficients, cached by per_image (called once per frame before the parallel pixel loop)
 	mutable unsigned cache_frame;
 	mutable double a_x, a_y, b_x, b_y;
+};
+
+class Wavy : public SimpleFractalType
+{
+public:
+	// _params: frequency_a (waves per B axis), amplitude_a (ratio of image size), phase_a (degrees),
+	//          [frequency_b, amplitude_b, phase_b] (B defaults to the A values)
+	//          default triple: 1, 0.02, 0 (360 degrees = one full wave)
+	Wavy(const Dimension& _a, const Dimension& _b, const Dimension& _c, double _d, double _e, const std::vector<double>& _params)
+	: SimpleFractalType(_a, _b, _c, _d, _e)
+	, freq_a(_params.size()>0 ? _params[0] : 1.0)
+	, amp_a_ratio(_params.size()>1 ? _params[1] : 0.02)
+	, phase_a(2.0*M_PI * (_params.size()>2 ? _params[2] : 0.0) / 360.0)
+	, freq_b(_params.size()>3 ? _params[3] : freq_a)
+	, amp_b_ratio(_params.size()>4 ? _params[4] : amp_a_ratio)
+	, phase_b(_params.size()>5 ? 2.0*M_PI*_params[5]/360.0 : phase_a)
+	, amp_a(amp_a_ratio * (a.max-a.min))
+	, amp_b(amp_b_ratio * (b.max-b.min))
+	, k_a(2.0*M_PI*freq_a/b.size)
+	, k_b(2.0*M_PI*freq_b/a.size)
+	{}
+
+	void per_line (double values[5], unsigned frame, unsigned line) const override;
+	void per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const override;
+	[[nodiscard]] const char* name() const override { return "wavy"; }
+
+private:
+	const double freq_a, amp_a_ratio, phase_a;
+	const double freq_b, amp_b_ratio, phase_b;
+	// phases in radians (input in degrees)
+	// amplitude as fraction of the A/B parameter range
+	const double amp_a, amp_b;
+	// angular frequency, radians per pixel (A wobbles along columns, B along lines)
+	const double k_a, k_b;
 };
 #endif // FRACTAL_TYPE_HH

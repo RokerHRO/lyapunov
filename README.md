@@ -52,6 +52,7 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
 * `tileable` : A and B each trace a full circle in the parameter plane, so the image repeats seamlessly in both directions (wallpaper).
 * `tileable-loop` : like `tileable`, plus C+D trace a circle over the frames (`-f <frames>`), so the animation loops seamlessly (frame N = frame 0).
 * `zoom` : animated fly-through into the (A,B) plane: over the whole animation the rectangle is scaled about its center (total zoom factor, final frame scale relative to frame 0) and rotated (total degrees), configured via `-p <total_zoom>,<total_rotation>` (default `0.1,360`).
+* `wavy` : the plain (A,B) plane with a sinusoidal warp (A wobbles along the columns, B along the lines, woven wave pattern), configured via `-p <freq_a>,<amp_a>,<phase_a>[,<freq_b>,<amp_b>,<phase_b>]`: frequency = number of waves per image axis (1 = one wave), amplitude = fraction of the image size (0.02 by default), phase in degrees (360 = one wave); the B triple defaults to the A values (default `1,0.02,0`).
 
 
 #### File formats
@@ -99,6 +100,17 @@ A second animation example is in the pov/ directory.
 `lyapunov -W 256 -H 256 -s ABABC -t tileable -o tileable.ppm`
 
 This image tiles seamlessly in both directions (wallpaper): the left edge continues at the right edge and vice versa, the same for top and bottom.
+
+<br clear="all" />
+
+#### Wavy
+<img src="img/A0,0020_B0,0060.png" width="256" height="256" align="right" />
+
+`lyapunov -W 512 -H 512 -i 400 -s ABBABA -x 3.0 -X 4.0 -y 4.0 -Y 3.0 -t wavy -p 10,0.002,0,10,0.006,0 -o wavy.ppm`
+
+The (A,B) plane with a sinusoidal warp: 10 waves per axis, amplitude of A is 2% of the image size, amplitude of B 6%, phase 0 degrees for both.
+
+A 6x6 grid of these images (amplitude of A 0.000...0.010 in the rows, amplitude of B 0.000...0.010 in the columns, 10 pixel gap, each image labeled with its amplitudes): [montage-6x6.png](img/montage-6x6.png)
 
 <br clear="all" />
 
