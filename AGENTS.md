@@ -9,6 +9,9 @@ Agent instructions for this repository. Project: Lyapunov fractal generators
 - `gen-ab-sequences`, `gen_zoom`, `gen_poses` – helper tools (see README)
 - `scripts/cube_tour.py` – renders perspective tours of image window poses
   (reads `gen_poses` output; PIL)
+- `scripts/warp_theta.py` – plots the twist/swirl warp rotation angle
+  theta(r) as SVG (repeatable `-t <deg>[,radius]` / `-s <deg>[,radius][,decay]`
+  curves; requires matplotlib)
 
 ## Build
 
@@ -60,12 +63,19 @@ Linux: g++/clang++).
    v = line/a.size vertical, both in [0,1]), `case` in `make_warp()`,
    help text + README "Warps" bullet. Warps are applied in
    `Flight::per_pixel` before the pose mapping; they must not change the
-   result when their amplitude is 0 (bit-exact).
+   result when their amplitude is 0 (bit-exact). Rotation/scale-style warps
+   must **explicitly `return`** for the zero-parameter case: arithmetic
+   like `0.5 + (u-0.5)` is NOT bit-exact `u` in floating point – that is
+   why `TwistWarp`/`SwirlWarp` guard on `twist == 0.0` and `MobiusWarp`
+   on `tx == 0 && ty == 0`.
 
 ## Naming of committed media (`img/`)
 
 - fractal animations: `anim-<type>-<sequence>.gif`
 - window tours: `<type>-<variant>-tour.mp4` / `<type>-<variant>.mp4`
+- warp examples: `warp-<name>-<sequence>.png` (one per warp in the README
+  "Warps" section; rendered at 512x512, scaled down to 50% = 256x256)
+- theta plot: `warp-theta-example.svg` (via `scripts/warp_theta.py`)
 
 ## Verification workflow
 

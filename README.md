@@ -7,7 +7,8 @@ These programs are in this repo:
 * a C++20 compiler with OpenMP: `g++` >= 11 (OpenMP/libgomp is included); with clang install `libomp` additionally
 * `cmake` >= 3.20
 * a libc with `getopt()` support
-* optional: Python 3 + Pillow (for the tour script `scripts/cube_tour.py`), `ffmpeg` (for GIF/MP4 previews)
+* optional: Python 3 + Pillow (for the tour script `scripts/cube_tour.py`),
+  matplotlib (for the warp plot `scripts/warp_theta.py`), `ffmpeg` (for GIF/MP4 previews)
 
 Install the packages:
 * Debian/Ubuntu: `sudo apt install cmake g++ make` (optionally `sudo apt install python3-pil ffmpeg`)
