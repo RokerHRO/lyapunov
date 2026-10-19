@@ -58,6 +58,7 @@ int nmax = 1000;                /* number of rounds */
 std::vector<double> params;
 std::string warp_name;
 std::vector<double> warp_params;
+bool warp_animated = false;
 
 FILE* of = nullptr;
 std::unique_ptr<FractalType> fractal_type;
@@ -382,7 +383,13 @@ void print_type_help(FILE* f)
 		"Warps (combine with a flight type via -w, parameters via -P):\n"
 		"\ta distortion of the image window, applied before the flight mapping, so it\n"
 		"\tcan be combined with 6sides, wander and rotor:\n"
-		"\t-t <flight> -w <warp> -p <flight params> -P <warp params>\n"
+		"\t-t <flight> -w <warp> -p <flight params> -P <warp params> [-A]\n"
+		"\t-A        : animate the warp: its main effect (amplitude, twist angle, lens\n"
+		"\t             center) ramps up linearly from 0 (first frame) to the full -P value\n"
+		"\t             (last frame); supported by wavy, noise, mobius, swirl and twist\n"
+		"\t             (zoom is already animated, inversion has no sensible ramp).\n"
+		"\t             For wavy the phases instead sweep one full wave (360 degrees):\n"
+		"\t             the wave travels, seamless loop for integer frequencies\n"
 		"\twavy      : sinusoidal warp (same parameters as the wavy type, amplitudes as a fraction of the window)\n"
 		"\tnoise     : 2D Perlin noise warp (same parameters as the noise type, amplitudes as a fraction of the window)\n"
 		"\tinversion : reflection of the window about a fixed circle (center and radius as a fraction of the window,\n"
@@ -425,7 +432,7 @@ int main(int argc, char** argv)
 {
 	const auto program_start = std::chrono::system_clock::now();
 	int a;
-	while( (a=getopt(argc, argv, "W:H:f:c:x:y:z:X:Y:Z:s:i:o:O:t:C:D:E:F:p:G:w:P:")) != -1 )
+	while( (a=getopt(argc, argv, "W:H:f:c:x:y:z:X:Y:Z:s:i:o:O:t:C:D:E:F:p:G:w:P:A")) != -1 )
 	{
 		switch(a)
 		{
@@ -465,6 +472,7 @@ int main(int argc, char** argv)
 			case 'p': params = parse_params(optarg); break;
 			case 'w': warp_name = optarg;   break;
 			case 'P': warp_params = parse_params(optarg); break;
+			case 'A': warp_animated = true;  break;
 			case 'G':
 			{
 				const char* colon = strchr(optarg, ':');
@@ -514,8 +522,9 @@ int main(int argc, char** argv)
 					"\n"
 					"\t-p params[,...] : comma-separated list of additional numerical parameters for -t\n"
 					"\t-w warp    : warp of the image window (only with the flight types 6sides, wander, rotor;\n"
-					"\t             supported: wavy, noise, inversion, zoom)\n"
+					"\t             supported: wavy, noise, inversion, mobius, swirl, twist, zoom)\n"
 					"\t-P params[,...] : comma-separated list of numerical parameters for -w\n"
+					"\t-A         : animate the warp over the frames (see -t help)\n"
 					, argv[0], bsize, asize, seq.c_str(), nmax,
 					type.c_str(), format.c_str(),
 					bmin, bmax, amin, amax, cmin, cmax, cmin, valueD, valueE
@@ -589,6 +598,10 @@ int main(int argc, char** argv)
 	if (!warp_name.empty())
 	{
 		fprintf(stderr, " W=%s", warp_name.c_str());
+		if (warp_animated)
+		{
+			fprintf(stderr, " (animated)");
+		}
 		if (!warp_params.empty())
 		{
 			fprintf(stderr, " WP=%f", warp_params[0]);
@@ -633,10 +646,15 @@ int main(int argc, char** argv)
 				return 2;
 		}
 	}
+	if (warp_animated && warp_name.empty())
+	{
+		fprintf(stderr, "Option -A (animate warp) requires -w <warp>.\n");
+		return 2;
+	}
 
 	try
 	{
-		std::unique_ptr<Warp> warp = warp_name.empty() ? nullptr : make_warp(warp_name, warp_params);
+		std::unique_ptr<Warp> warp = warp_name.empty() ? nullptr : make_warp(warp_name, warp_params, warp_animated);
 		fractal_type = make_fractal_type(type, dim_a, dim_b, dim_c, valueD, valueE, params, std::move(warp));
 	}
 	catch (const std::invalid_argument& e)

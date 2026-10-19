@@ -400,18 +400,30 @@ WindowPose RotorPath::poseAt(unsigned frame, unsigned frameCount) const
 }
 
 
-void WavyWarp::warp(double& u, double& v, unsigned, unsigned, unsigned line, unsigned column, unsigned a_size, unsigned b_size) const
+void WavyWarp::warp(double& u, double& v, unsigned frame, unsigned frameCount, unsigned line, unsigned column, unsigned a_size, unsigned b_size) const
 {
+	if (animated())
+	{
+		// the phases sweep one full wave (360 degrees) over the animation:
+		// the wave travels, and with integer frequencies the pattern at the
+		// last frame is the one of the first (seamless loop)
+		const double span = (frameCount > 1) ? double(frameCount - 1) : 1.0;
+		const double sweep = 2.0*M_PI * double(frame) / span;
+		v += amp_a * sin(2.0*M_PI*freq_a*column/b_size - phase_a - sweep);
+		u += amp_b * sin(2.0*M_PI*freq_b*line/a_size - phase_b - sweep);
+		return;
+	}
 	v += amp_a * sin(2.0*M_PI*freq_a*column/b_size - phase_a);
 	u += amp_b * sin(2.0*M_PI*freq_b*line/a_size - phase_b);
 }
 
-void NoiseWarp::warp(double& u, double& v, unsigned, unsigned, unsigned line, unsigned column, unsigned a_size, unsigned b_size) const
+void NoiseWarp::warp(double& u, double& v, unsigned frame, unsigned frameCount, unsigned line, unsigned column, unsigned a_size, unsigned b_size) const
 {
 	const double x = (column + 0.5) / b_size * freq;
 	const double y = (line + 0.5) / a_size * freq;
-	v += amp_a * perlin.noise(x, y);
-	u += amp_b * perlin.noise(x, y + 52.0);
+	const double f = anim_factor(frame, frameCount);
+	v += amp_a * f * perlin.noise(x, y);
+	u += amp_b * f * perlin.noise(x, y + 52.0);
 }
 
 void InversionWarp::warp(double& u, double& v, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned) const
@@ -427,38 +439,39 @@ void InversionWarp::warp(double& u, double& v, unsigned, unsigned, unsigned, uns
 	}
 }
 
-void TwistWarp::warp(double& u, double& v, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned) const
+void TwistWarp::warp(double& u, double& v, unsigned frame, unsigned frameCount, unsigned, unsigned, unsigned, unsigned) const
 {
 	if (twist == 0.0)
 		return; // zero twist is the identity (bit-exact)
 	const double du = u - 0.5, dv = v - 0.5;
-	const double ang = twist * (du*du + dv*dv) / (radius*radius);
+	const double ang = twist * anim_factor(frame, frameCount) * (du*du + dv*dv) / (radius*radius);
 	const double s = std::sin(ang), c = std::cos(ang);
 	u = 0.5 + c*du - s*dv;
 	v = 0.5 + s*du + c*dv;
 }
 
-void SwirlWarp::warp(double& u, double& v, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned) const
+void SwirlWarp::warp(double& u, double& v, unsigned frame, unsigned frameCount, unsigned, unsigned, unsigned, unsigned) const
 {
 	if (twist == 0.0)
 		return; // zero twist is the identity (bit-exact)
 	const double du = u - 0.5, dv = v - 0.5;
 	const double r = std::sqrt(du*du + dv*dv);
 	const double t = std::min(r / radius, 1.0);
-	const double ang = twist * std::exp(-decay * (1.0 - t));
+	const double ang = twist * anim_factor(frame, frameCount) * std::exp(-decay * (1.0 - t));
 	const double s = std::sin(ang), c = std::cos(ang);
 	u = 0.5 + c*du - s*dv;
 	v = 0.5 + s*du + c*dv;
 }
 
-void MobiusWarp::warp(double& u, double& v, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned) const
+void MobiusWarp::warp(double& u, double& v, unsigned frame, unsigned frameCount, unsigned, unsigned, unsigned, unsigned) const
 {
 	if (tx == 0.0 && ty == 0.0)
 		return; // no lens is the identity (bit-exact)
 	// window coordinates, centered and scaled by the lens radius
 	const double x = (u - 0.5) / radius, y = (v - 0.5) / radius;
-	// lens center t in the same normalized plane
-	const double a = tx / radius, b = ty / radius;
+	// lens center t in the same normalized plane, ramped over the animation
+	const double f = anim_factor(frame, frameCount);
+	const double a = (tx / radius) * f, b = (ty / radius) * f;
 	// w = (z - t) / (1 - conj(t) * z)  with z = x + iy, t = a + ib
 	const double nr = x - a, ni = y - b;
 	const double dn_r = 1.0 - (a*x + b*y);
@@ -750,25 +763,54 @@ std::unique_ptr<FractalType> make_fractal_type(std::string_view type,
 }
 
 std::unique_ptr<Warp> make_warp(std::string_view warp,
-	const std::vector<double>& params)
+	const std::vector<double>& params, bool animated)
 {
 	switch (case_hash(warp))
 	{
 		case "wavy"_case:
+		{
 			if (params.size() > 0 && params[0] <= 0.0)
 				throw std::invalid_argument("wavy: frequency_a must be > 0 (got " + std::to_string(params[0]) + ").");
 			if (params.size() > 3 && params[3] <= 0.0)
 				throw std::invalid_argument("wavy: frequency_b must be > 0 (got " + std::to_string(params[3]) + ").");
-			return std::make_unique<WavyWarp>(params);
+			auto w = std::make_unique<WavyWarp>(params);
+			if (animated) w->set_animated(true);
+			return w;
+		}
 		case "noise"_case:
+		{
 			if (params.size() > 0 && params[0] <= 0.0)
 				throw std::invalid_argument("noise: frequency must be > 0 (got " + std::to_string(params[0]) + ").");
-			return std::make_unique<NoiseWarp>(params);
-		case "inversion"_case: return std::make_unique<InversionWarp>(params);
-		case "mobius"_case: return std::make_unique<MobiusWarp>(params);
-		case "swirl"_case: return std::make_unique<SwirlWarp>(params);
-		case "twist"_case: return std::make_unique<TwistWarp>(params);
-		case "zoom"_case: return std::make_unique<ZoomWarp>(params);
+			auto w = std::make_unique<NoiseWarp>(params);
+			if (animated) w->set_animated(true);
+			return w;
+		}
+		case "inversion"_case:
+			if (animated)
+				throw std::invalid_argument("warp \"inversion\" does not support animation (-A): there is no sensible ramp for the inversion radius");
+			return std::make_unique<InversionWarp>(params);
+		case "mobius"_case:
+		{
+			auto w = std::make_unique<MobiusWarp>(params);
+			if (animated) w->set_animated(true);
+			return w;
+		}
+		case "swirl"_case:
+		{
+			auto w = std::make_unique<SwirlWarp>(params);
+			if (animated) w->set_animated(true);
+			return w;
+		}
+		case "twist"_case:
+		{
+			auto w = std::make_unique<TwistWarp>(params);
+			if (animated) w->set_animated(true);
+			return w;
+		}
+		case "zoom"_case:
+			if (animated)
+				throw std::invalid_argument("warp \"zoom\" is already animated over the frames (its parameters are the animation totals), -A is not supported");
+			return std::make_unique<ZoomWarp>(params);
 	}
 	throw std::invalid_argument(std::string("unknown warp \"") + std::string(warp) + "\" (supported: wavy, noise, inversion, mobius, swirl, twist, zoom)");
 }

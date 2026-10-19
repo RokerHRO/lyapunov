@@ -112,6 +112,11 @@ public:
 // a distortion applied to the normalized image window coordinates before the
 // flight mapping: u = (column+0.5)/b.size (horizontal), v = (line+0.5)/a.size
 // (vertical), both in [0,1]. Any warp can be combined with any flight path.
+// With _animated (CLI: -A), the main effect ramps up linearly over the
+// animation: factor (frame+1)/frameCount at frame 0 -> 1 (frameCount-1).
+// The supported warps scale their amount (amplitude/angle/lens) by that
+// factor; zoom is already animated over the frames, inversion has no
+// sensible ramp (unsupported).
 class Warp
 {
 public:
@@ -119,6 +124,19 @@ public:
 
 	virtual void warp(double& u, double& v, unsigned frame, unsigned frameCount, unsigned line, unsigned column, unsigned a_size, unsigned b_size) const = 0;
 	[[nodiscard]] virtual const char* name() const = 0;
+
+	void set_animated(bool animated) { _animated = animated; }
+	[[nodiscard]] bool animated() const { return _animated; }
+
+protected:
+	// the per-frame ramp factor for animated warps (1.0 when not animated)
+	[[nodiscard]] double anim_factor(unsigned frame, unsigned frameCount) const
+	{
+		return _animated ? double(frame + 1) / double(frameCount) : 1.0;
+	}
+
+private:
+	bool _animated = false;
 };
 
 namespace detail
@@ -599,9 +617,11 @@ std::unique_ptr<FractalType> make_fractal_type(std::string_view type,
 
 // factory: creates the warp named by the command line string (case-
 // insensitive). Throws std::invalid_argument for an unknown warp or invalid
-// parameters.
+// parameters. With _animated the warp's main effect ramps up linearly over
+// the animation (see Warp); not supported by the "inversion" and "zoom"
+// warps (throws).
 std::unique_ptr<Warp> make_warp(std::string_view warp,
-	const std::vector<double>& params);
+	const std::vector<double>& params, bool animated = false);
 
 // factory: creates the flight path (window poses only) named by the command
 // line string (case-insensitive). Throws std::invalid_argument for all

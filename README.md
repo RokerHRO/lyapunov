@@ -53,6 +53,10 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
         -w warp    : warp of the image window, only with the flight types 6sides, wander, rotor
                      (supported: wavy, noise, inversion, mobius, swirl, twist, zoom, see "Warps" below)
         -P params[,...] : comma-separated list of numerical parameters for -w
+        -A         : animate the warp over the frames: its main effect (amplitude, twist
+                     angle, lens center) ramps up linearly from 0 (first frame) to the
+                     full -P value (last frame); supported by wavy, noise, mobius, swirl
+                     and twist (zoom is already animated, inversion has no sensible ramp)
 
         -c cx:cy:x_size : center coordinates and size.
            The x, X, y and Y values will be calculated from them automatically:
@@ -100,6 +104,14 @@ The warps have the same shape and parameter meaning as the plain-plane types abo
 * `swirl` : vortex about the window center, the twist angle grows exponentially with the distance (the center is almost undisturbed, the border is strongly wound up) — `-P <twist_degrees>[,radius][,decay]` (default `180,0.7071,3`)
 * `twist` : rotates the window about its center by an angle proportional to the square of the distance (the center stays fixed, the border winds up) — `-P <twist_degrees>[,radius]` (default `180,0.7071`: full twist at the window corner)
 * `zoom` : scale and rotate the window about its center over the animation — `-P <total_zoom>,<total_rotation_degrees>` (default `0.1,360`)
+
+With `-A`, a warp is **animated**: its main effect (amplitude, twist angle, lens
+center) ramps up linearly from 0 at the first frame to the full `-P` value at
+the last frame (supported by `wavy`, `noise`, `mobius`, `swirl` and `twist`;
+`zoom` is already animated over the frames, `inversion` has no sensible ramp).
+For `wavy`, the phases instead sweep one full wave (360 degrees) over the
+animation: the wave travels, and with integer frequencies the last frame
+matches the first (seamless loop).
 
 Warp examples (all: one 6-sides cruise frame, ease 2, frame 128 of 512, sequence ABBCAC; generated at 512x512 and scaled down to 50%):
 
@@ -273,6 +285,23 @@ The 6-sides cruise (`-t 6sides`, ease 2) with the image window reflected about a
 The rotor (A axis, one full turn) with a Perlin noise warp, 512x512, 256 frames:
 
 `lyapunov -W 512 -H 512 -i 400 -s ABBCAC -f 256 -t rotor -w noise -P 3,0.1,0.1,5 -o rotor-noise-{f}` &rarr; [rotor-noise](img/rotor-noise.mp4)
+
+The rotor (A axis, one full turn) with a sinusoidal warp (4 waves per axis,
+amplitude 5% of the window), 512x512, 512 frames — static (the wave is fixed
+in the window) and animated via `-A` (the wave travels: the phases sweep one
+full wave, seamless loop for integer frequencies):
+
+`lyapunov -W 512 -H 512 -i 400 -s ABBCAC -f 512 -t rotor -w wavy -P 4,0.05,0 -o wavy-{f}` &rarr; [wavy](img/anim-rotor-wavy-ABBCAC.mp4)
+
+`lyapunov -W 512 -H 512 -i 400 -s ABBCAC -f 512 -t rotor -w wavy -P 4,0.05,0 -A -o wavy-{f}` &rarr; [wavy, animated](img/anim-rotor-wavy-animated-ABBCAC.mp4)
+
+The same pair with the twist warp: static (the full 180-degree twist in every
+frame) and animated (the twist winds up from 0 to 180 degrees over the
+frames):
+
+`lyapunov -W 512 -H 512 -i 400 -s ABBCAC -f 512 -t rotor -w twist -P 180 -o twist-{f}` &rarr; [twist](img/anim-rotor-twist-ABBCAC.mp4)
+
+`lyapunov -W 512 -H 512 -i 400 -s ABBCAC -f 512 -t rotor -w twist -P 180 -A -o twist-{f}` &rarr; [twist, animated](img/anim-rotor-twist-animated-ABBCAC.mp4)
 
 <br clear="all" />
 

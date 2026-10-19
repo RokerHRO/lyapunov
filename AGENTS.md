@@ -68,6 +68,13 @@ Linux: g++/clang++).
    like `0.5 + (u-0.5)` is NOT bit-exact `u` in floating point – that is
    why `TwistWarp`/`SwirlWarp` guard on `twist == 0.0` and `MobiusWarp`
    on `tx == 0 && ty == 0`.
+   Animation (`-A`, CLI) is set via `Warp::set_animated()` (factory
+   `make_warp(…, animated)`); a new warp should support it by scaling its
+   main effect with `anim_factor(frame, frameCount)` (ramp 0 → full over
+   the animation) – or, like `WavyWarp`, by the more natural phase sweep
+   (360 degrees, seamless loop for integer frequencies). Documented
+   exceptions that reject `-A`: `zoom` (already animated) and `inversion`
+   (no sensible ramp).
 
 ## Naming of committed media (`img/`)
 
