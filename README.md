@@ -50,7 +50,7 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
 
         -p params[,...] : comma-separated list of additional numerical parameters for -t
         -w warp    : warp of the image window, only with the flight types 6sides, wander, rotor
-                     (supported: wavy, noise, inversion, zoom, see "Warps" below)
+                     (supported: wavy, noise, inversion, mobius, swirl, twist, zoom, see "Warps" below)
         -P params[,...] : comma-separated list of numerical parameters for -w
 
         -c cx:cy:x_size : center coordinates and size.
@@ -267,7 +267,7 @@ The (A,B) slice at `C=0.5` (A vertical, B horizontal in the image) spins in plac
 
 <img src="img/anim-6sides-inversion-ABBCAC.gif" align="right" />
 
-The 6-sides cruise (`-t 6sides`, ease 2) with the image window reflected about a circle in the window plane (`-w inversion`, default circle: window center, radius half of the window height). Any warp (`wavy`, `noise`, `inversion`, `zoom`) can be combined with any flight type (`6sides`, `wander`, `rotor`); the flight parameters go to `-p`, the warp parameters to `-P`.
+The 6-sides cruise (`-t 6sides`, ease 2) with the image window reflected about a circle in the window plane (`-w inversion`, default circle: window center, radius half of the window height). Any warp (`wavy`, `noise`, `inversion`, `mobius`, `swirl`, `twist`, `zoom`) can be combined with any flight type (`6sides`, `wander`, `rotor`); the flight parameters go to `-p`, the warp parameters to `-P`.
 
 The rotor (A axis, one full turn) with a Perlin noise warp, 512x512, 256 frames:
 
