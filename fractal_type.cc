@@ -274,8 +274,9 @@ void Flight::per_line(double /*values*/[5], unsigned /*frame*/, unsigned /*line*
 
 void Flight::per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const
 {
-	double u = (column+0.5) / b.size;
-	double v = (line+0.5) / a.size;
+	const unsigned side = a.size > b.size ? a.size : b.size;
+	double u = (column + 0.5 + (side - b.size)/2) / side;
+	double v = (line + 0.5 + (side - a.size)/2) / side;
 	if (warp)
 		warp->warp(u, v, frame, c.size, line, column, a.size, b.size);
 	const double A01 = pose.corner.x + u*pose.u_axis.x + v*pose.v_axis.x;
