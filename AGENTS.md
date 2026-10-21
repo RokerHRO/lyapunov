@@ -83,6 +83,12 @@ Linux: g++/clang++).
 - warp examples: `warp-<name>-<sequence>.png` (one per warp in the README
   "Warps" section; rendered at 512x512, scaled down to 50% = 256x256)
 - theta plot: `warp-theta-example.svg` (via `scripts/warp_theta.py`)
+- MP4 animations always embed the generation parameters as metadata
+  (`title` + `comment`), added by a lossless remux (`-c copy`, no
+  re-encode), e.g.
+  `ffmpeg -y -i in.mp4 -c copy -metadata title="Lyapunov 6sides flight, sequence AACBBC, 1536 frames" -metadata comment="lyapunov -W 3840 -H 2160 -f 1536 -i 400 -t 6sides -p 1,1 -s AACBBC -x 3.1 -X 3.9 -y 3.1 -Y 3.9 -z 3.1 -Z 3.9 (build 8b3e2c3, lock-on early break); downscale 1920x1080 lanczos; 25 fps" out.mp4`
+  (comment = full `lyapunov` command line + build/optimization notes +
+  post-processing such as downscale/fps)
 
 ## Verification workflow
 
