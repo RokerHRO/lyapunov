@@ -252,15 +252,13 @@ void make_ppm(const unsigned frame_nr)
 	if(setE) fprintf(of, " E=%f", valueE);
 	if(setF) fprintf(of, " F=%f", valueF);
 	
-	fprintf(of, "\n"
-		"%d %d 255\n",
-		bsize, asize
-		);
+	fprintf(of, "\n%d %d 255\n", bsize, asize);
 	
 	for (int ai = 0; ai < asize; ++ai)
 	{
 		fwrite(&img[size_t(ai) * bsize], sizeof(RGB), bsize, of);
 	}
+	
 	fflush(of);
 
 	if (!outfile.empty())
@@ -268,6 +266,7 @@ void make_ppm(const unsigned frame_nr)
 		fclose(of);
 	}
 }
+
 
 void make_ppm()
 {

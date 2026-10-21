@@ -92,6 +92,7 @@ struct WindowPose
 	Vec3 v_axis;
 };
 
+
 // a time-dependent path of the image window through the unit ABC cube
 class FlightPath
 {
@@ -133,6 +134,7 @@ private:
 	int perm[512] = {};
 };
 }
+
 
 // sinusoidal warp of the window (same shape and parameters as the "wavy"
 // fractal type, applied in window coordinates): the A direction (v) wobbles
@@ -182,6 +184,7 @@ private:
 	const detail::Perlin perlin;
 };
 
+
 // reflection of the window about a fixed circle in the window plane
 // (same shape as the "inversion" fractal type, applied in window coordinates)
 // _params: [center_a,center_b[,radius]] as fractions of the window size
@@ -201,6 +204,7 @@ public:
 private:
 	const double center_v, center_u, radius;
 };
+
 
 // twist: rotates every window point about the window center by an angle
 // proportional to the square of its distance from the center: the center
@@ -222,6 +226,7 @@ private:
 	const double twist;  // full twist angle in radians (at r = radius)
 	const double radius; // distance (in window units) where the full twist is reached
 };
+
 
 // swirl: a vortex about the window center: the twist angle grows
 // exponentially with the distance from the center (the center is almost
@@ -245,6 +250,7 @@ private:
 	const double radius; // distance (in window units) where the full twist is reached
 	const double decay;  // exponential falloff toward the center
 };
+
 
 // mobius: a Moebius transform of the window (Poincare-disk automorphism,
 // "hyperbolic lens"): the content is pulled toward (tx,ty) while the opposite
@@ -273,6 +279,7 @@ private:
 	const double tx, ty, radius;
 };
 
+
 // zoom warp of the window about its center over the animation (same shape and
 // parameters as the "zoom" fractal type, applied in window coordinates)
 // _params: <total_zoom_factor>,<total_rotation_degrees> (default 0.1,360)
@@ -294,6 +301,7 @@ private:
 	mutable unsigned cache_frame;
 	mutable double s_sin = 1.0, s_cos = 1.0;
 };
+
 
 // generic flight: a FlightPath provides the image window pose in the unit
 // ABC cube per frame, each pixel is the affine combination
@@ -319,6 +327,7 @@ private:
 	mutable WindowPose pose{};
 	mutable unsigned pose_frame{~0u};
 };
+
 
 // the classic sixsides flight: the (A,B) slice at C=cmin tilts about 6 cube
 // edges (90 degrees each, axes A,C,B,A,C,B), visiting all 6 faces of the
@@ -370,6 +379,7 @@ private:
 	void dumpPathData(std::ostream&, unsigned frameCount) const override;
 };
 
+
 // random wander: the window center travels along a closed Catmull-Rom
 // spline through randomly generated keyframes (centers uniform in the unit
 // cube, random orientations), reparameterized by arc length for a constant
@@ -394,6 +404,7 @@ private:
 
 	void dumpPathData(std::ostream&, unsigned frameCount) const override;
 };
+
 
 // rotor: the (A,B) slice at C=0.5 (A vertical, B horizontal in the image)
 // spins in place about an axis through the cube center: the window performs
@@ -488,6 +499,7 @@ public:
 	[[nodiscard]] const char* name() const override { return "tileable-loop"; }
 };
 
+
 class Zoom : public SimpleFractalType
 {
 public:
@@ -513,6 +525,7 @@ private:
 	mutable unsigned cache_frame;
 	mutable double a_x, a_y, b_x, b_y;
 };
+
 
 class Wavy : public SimpleFractalType
 {
@@ -548,6 +561,7 @@ private:
 	const double k_a, k_b;
 };
 
+
 class Noise : public SimpleFractalType
 {
 public:
@@ -570,6 +584,7 @@ private:
 	const detail::Perlin perlin;
 };
 
+
 class Inversion : public SimpleFractalType
 {
 public:
@@ -589,6 +604,7 @@ private:
 	const double center_a, center_b, radius;
 };
 
+
 // factory: creates the fractal type named by the command line string
 // (case-insensitive). Throws std::invalid_argument for an unknown type or
 // invalid parameters. _warp is only used by the flight types (6sides,
@@ -597,16 +613,16 @@ std::unique_ptr<FractalType> make_fractal_type(std::string_view type,
 	const Dimension& a, const Dimension& b, const Dimension& c, double d, double e,
 	const std::vector<double>& params, std::unique_ptr<Warp> warp = nullptr);
 
+
 // factory: creates the warp named by the command line string (case-
 // insensitive). Throws std::invalid_argument for an unknown warp or invalid
 // parameters.
-std::unique_ptr<Warp> make_warp(std::string_view warp,
-	const std::vector<double>& params);
+std::unique_ptr<Warp> make_warp(std::string_view warp, const std::vector<double>& params);
+
 
 // factory: creates the flight path (window poses only) named by the command
 // line string (case-insensitive). Throws std::invalid_argument for all
 // types that are not FlightPath subclasses.
-std::unique_ptr<FlightPath> make_flight_path(std::string_view type,
-	const std::vector<double>& params);
+std::unique_ptr<FlightPath> make_flight_path(std::string_view type, const std::vector<double>& params);
 
 #endif // FRACTAL_TYPE_HH
