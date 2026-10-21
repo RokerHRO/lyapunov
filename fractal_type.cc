@@ -486,6 +486,7 @@ void ZoomWarp::warp(double& u, double& v, unsigned frame, unsigned frameCount, u
 	v = 0.5 + s_sin*x + s_cos*y;
 }
 
+
 void Circle::per_image(double values[5], unsigned frame) const
 {
 	if (c.size==0)
@@ -495,7 +496,7 @@ void Circle::per_image(double values[5], unsigned frame) const
 		values[4] = e;
 	}else{
 		const double cm = (c.min + c.max)/2;
-		const double r = abs(c.max - c.min);
+		const double r = fabs(c.max - c.min);
 		const double phi = frame * 2*M_PI / c.size;
 		values[2] = cm - r*cos(phi);
 		values[3] = d + r*sin(phi);
