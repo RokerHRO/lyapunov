@@ -29,6 +29,7 @@ std::string seq = "BBBABBAAAAAA";
 std::string type = "plain";
 std::string format = "pnm";
 std::string outfile;
+std::string post_frame_cmd;
 
 double cmin = 2.5; // We go to 3rd dimension! \o/
 double cmax = 4.0; //
@@ -87,21 +88,41 @@ std::string replace_all(std::string orig, std::string_view search, std::string_v
 }
 
 
+// no animation (csize==0): {f} expands to the empty string, otherwise
+// zero-padded to the width of the last frame number
+std::string frame_nr_to_string(const unsigned frame_nr)
+{
+	if (csize == 0)
+		return {};
+	char buf[16] = {};
+	const unsigned digits = snprintf(nullptr, 0, "%u", csize-1);
+	snprintf(buf, sizeof(buf), "%0*u", digits, frame_nr);
+	return buf;
+}
+
+std::string expand_patterns(std::string tmpl, const unsigned frame_nr)
+{
+	tmpl = replace_all(tmpl, "{s}", seq);
+	tmpl = replace_all(tmpl, "{i}", std::to_string(nmax));
+	tmpl = replace_all(tmpl, "{f}", frame_nr_to_string(frame_nr));
+	return tmpl;
+}
+
 std::string decorate_filename(std::string filename, const unsigned frame_nr)
 {
-	// no animation (csize==0): {f} expands to the empty string
-	std::string frame_nr_string;
-	if (csize > 0)
+	return expand_patterns(filename, frame_nr);
+}
+
+void run_post_frame_cmd(const std::string& out_name, const unsigned frame_nr)
+{
+	// {o} is substituted last: the file name itself is already fully expanded
+	const std::string cmd = replace_all(expand_patterns(post_frame_cmd, frame_nr), "{o}", out_name);
+	fprintf(stderr, "=== Post frame command: %s ===\n", cmd.c_str());
+	const int rc = std::system(cmd.c_str());
+	if (rc != 0)
 	{
-		char buf[16] = {};
-		const unsigned digits = snprintf(nullptr, 0, "%u", csize-1);
-		snprintf(buf, sizeof(buf), "%0*u", digits, frame_nr);
-		frame_nr_string = buf;
+		fprintf(stderr, "Post frame command for frame #%u failed (status %d), continuing.\n", frame_nr, rc);
 	}
-	filename = replace_all(filename, "{s}", seq);
-	filename = replace_all(filename, "{i}", std::to_string(nmax) );
-	filename = replace_all(filename, "{f}", frame_nr_string);
-	return filename;
 }
 
 template<class PXL>
@@ -216,9 +237,10 @@ void lyapunov(std::vector<PXL>& img, const int max_iter, const std::string& sequ
 
 void make_ppm(const unsigned frame_nr)
 {
+	std::string outfile_ppm;
 	if (!outfile.empty())
 	{
-		std::string outfile_ppm = decorate_filename(outfile, frame_nr);
+		outfile_ppm = decorate_filename(outfile, frame_nr);
 		if (outfile_ppm.empty() || outfile_ppm.back() == '/' || outfile_ppm.back() == '\\')
 			throw std::runtime_error("the output filename is empty after replacing the template patterns");
 		if (!outfile_ppm.ends_with(".ppm"))
@@ -267,6 +289,8 @@ void make_ppm(const unsigned frame_nr)
 	if (!outfile.empty())
 	{
 		fclose(of);
+		if (!post_frame_cmd.empty())
+			run_post_frame_cmd(outfile_ppm, frame_nr);
 	}
 }
 
@@ -432,7 +456,7 @@ int main(int argc, char** argv)
 {
 	const auto program_start = std::chrono::system_clock::now();
 	int a;
-	while( (a=getopt(argc, argv, "W:H:f:c:x:y:z:X:Y:Z:s:i:o:O:t:C:D:E:F:p:G:w:P:A")) != -1 )
+	while( (a=getopt(argc, argv, "W:H:f:c:x:y:z:X:Y:Z:s:i:o:O:t:C:D:E:F:p:G:r:w:P:A")) != -1 )
 	{
 		switch(a)
 		{
@@ -470,6 +494,7 @@ int main(int argc, char** argv)
 			case 'E': valueE = atof(optarg); setE = true; break;
 			case 'F': valueF = atof(optarg); setF = true; break;
 			case 'p': params = parse_params(optarg); break;
+			case 'r': post_frame_cmd = optarg; break;
 			case 'w': warp_name = optarg;   break;
 			case 'P': warp_params = parse_params(optarg); break;
 			case 'A': warp_animated = true;  break;
@@ -506,6 +531,8 @@ int main(int argc, char** argv)
 					"\t-t type    : fractal type (default: %s, run \"-t help\" to get a list of types)\n"
 					"\t-o outfile : basename of the output file (stdout if not given)\n"
 					"\t             These patterns are replaced: {s}: sequence, {i}: iter, {f}: frame_nr\n"
+					"\t-r command : run a shell command after each written frame (pnm/ppm only, requires -o)\n"
+					"\t             Patterns: {s}: sequence, {i}: iter, {f}: frame_nr, {o}: output file name\n"
 					"\t-O format  : either \"pnm\" for image (series) or \"3df\" for 3D voxel file (default: \"%s\")\n"
 					"\n"
 					"\t-c cx:cy:x_size : center coordinates and size.\n"
@@ -667,6 +694,20 @@ int main(int argc, char** argv)
 	{
 		fprintf(stderr, "3df output requires a z dimension: use -f <frames>.\n");
 		return 2;
+	}
+
+	if (!post_frame_cmd.empty())
+	{
+		if (outfile.empty())
+		{
+			fprintf(stderr, "Option -r (post frame command) requires -o <outfile>.\n");
+			return 2;
+		}
+		if (case_hash(format) == "3df"_case)
+		{
+			fprintf(stderr, "Option -r (post frame command) is only supported with pnm/ppm output.\n");
+			return 2;
+		}
 	}
 
 	switch (case_hash(format))

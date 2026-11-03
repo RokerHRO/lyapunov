@@ -47,6 +47,8 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
         -t type    : fractal type (default: plain, run "-t help" to get a list of types)
         -o outfile : basename of the output file (stdout if not given)
                      Can contain template patterns: {s}: sequence, {i}: iter, {f}: frame_nr
+        -r command : run a shell command after each written frame (pnm/ppm only, requires -o)
+                     Patterns: {s}: sequence, {i}: iter, {f}: frame_nr, {o}: output file name
         -O format  : either "pnm" for image (series) or "3df" for 3D voxel file (default: "pnm")
 
         -p params[,...] : comma-separated list of additional numerical parameters for -t
