@@ -72,7 +72,9 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
 	                  supported: wavy, noise, inversion, mobius, swirl, twist, zoom)
 	-P params[,...], --warp-params : comma-separated list of numerical parameters for -w
 	-A, --animate-warp : animate the warp over the frames (see -t help)
-	--grid[=spec] : draw and label coordinate lines on the rendered PPM frames (spec currently ignored)
+	--grid[=font,size,fg,bg] : draw and label coordinate lines on the rendered PPM frames
+	                           (font 16, 20, 24 or 32, default 16; grid size dense, medium or sparse, default medium;
+	                           fg/bg #RRGGBB, default #FFFFFF/#000000; trailing parameters may be omitted)
 ```
 
 <img src="seq-ABAAAAB.png" width="250" height="250" align="right" />

@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cstdint>
 #include <memory>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <string>
@@ -64,6 +65,9 @@ bool warp_animated = false;
 
 bool grid = false;
 std::string grid_spec;
+enum GridSize { GridDense, GridMedium, GridSparse };
+int grid_font = 16;
+GridSize grid_size = GridMedium;
 
 FILE* of = nullptr;
 std::unique_ptr<FractalType> fractal_type;
@@ -75,8 +79,11 @@ double lambda_max = 0.3959;
 
 struct RGB
 {
-	unsigned char r,g,b;
+	uint8_t r,g,b;
 };
+
+RGB grid_fg{ 0xFF, 0xFF, 0xFF };
+RGB grid_bg{ 0x00, 0x00, 0x00 };
 
 
 std::string replace_all(std::string orig, std::string_view search, std::string_view replacement)
@@ -490,7 +497,9 @@ void print_help(FILE* f)
 		"\t                  supported: wavy, noise, inversion, mobius, swirl, twist, zoom)\n"
 		"\t-P params[,...], --warp-params : comma-separated list of numerical parameters for -w\n"
 		"\t-A, --animate-warp : animate the warp over the frames (see -t help)\n"
-		"\t--grid[=spec] : draw and label coordinate lines on the rendered PPM frames (spec currently ignored)\n"
+		"\t--grid[=font,size,fg,bg] : draw and label coordinate lines on the rendered PPM frames\n"
+		"\t                           (font 16, 20, 24 or 32, default 16; grid size dense, medium or sparse, default medium;\n"
+		"\t                           fg/bg #RRGGBB, default #FFFFFF/#000000; trailing parameters may be omitted)\n"
 		, progname, bsize, asize, seq.c_str(), nmax,
 		type.c_str(), format.c_str(),
 		bmin, bmax, amin, amax, cmin, cmax, cmin, valueD, valueE
@@ -509,6 +518,71 @@ std::vector<double> parse_params(const char* p)
 			ss.ignore();
 	}
 	return params;
+}
+
+RGB parse_hex_color(const std::string& t)
+{
+	if (t.size() != 7 || t[0] != '#')
+		throw std::invalid_argument("Invalid grid color \"" + t + "\" (expected #RRGGBB).");
+	for (size_t i = 1; i < t.size(); ++i)
+		if (!isxdigit(uint8_t(t[i])))
+			throw std::invalid_argument("Invalid grid color \"" + t + "\" (expected #RRGGBB).");
+	return RGB{
+		uint8_t(std::stoul(t.substr(1, 2), nullptr, 16)),
+		uint8_t(std::stoul(t.substr(3, 2), nullptr, 16)),
+		uint8_t(std::stoul(t.substr(5, 2), nullptr, 16))
+	};
+}
+
+// grid spec: [font,size,fg,bg], all parameters optional (in this order), e.g. "24,sparse"
+void parse_grid_spec(const std::string& spec)
+{
+	if (spec.empty())
+		return; // getopt_long may pass "" for "--grid" without a value: all defaults
+	std::vector<std::string> tokens;
+	std::string tok;
+	for (char ch : (spec + ','))
+	{
+		if (ch == ',')
+		{
+			tokens.push_back(tok);
+			tok.clear();
+		}
+		else
+			tok += ch;
+	}
+	if (tokens.size() > 4)
+		throw std::invalid_argument("Grid specification \"" + spec + "\" has too many parameters (max: font,size,fg,bg).");
+	for (size_t i = 0; i < tokens.size(); ++i)
+	{
+		const std::string& t = tokens[i];
+		if (t.empty())
+			throw std::invalid_argument("Grid parameter " + std::to_string(i+1) + " of \"" + spec + "\" is empty.");
+		switch (i)
+		{
+			case 0:
+			{
+				char* end = nullptr;
+				const long v = strtol(t.c_str(), &end, 10);
+				if (end == t.c_str() || *end != '\0' || (v != 16 && v != 20 && v != 24 && v != 32))
+					throw std::invalid_argument("Invalid grid font size \"" + t + "\" (allowed: 16, 20, 24, 32).");
+				grid_font = v;
+				break;
+			}
+			case 1:
+				switch (case_hash(t))
+				{
+					case "dense"_case:  grid_size = GridDense;  break;
+					case "medium"_case: grid_size = GridMedium; break;
+					case "sparse"_case: grid_size = GridSparse; break;
+					default:
+						throw std::invalid_argument("Invalid grid size \"" + t + "\" (allowed: dense, medium, sparse).");
+				}
+				break;
+			case 2: grid_fg = parse_hex_color(t); break;
+			case 3: grid_bg = parse_hex_color(t); break;
+		}
+	}
 }
 
 
@@ -646,6 +720,19 @@ int main(int argc, char** argv)
 		return 2;
 	}
 
+	if(grid)
+	{
+		try
+		{
+			parse_grid_spec(grid_spec);
+		}
+		catch (const std::invalid_argument& e)
+		{
+			fprintf(stderr, "%s\n", e.what());
+			return 2;
+		}
+	}
+
 	if(!center.empty())
 	{
 		double cx=0.0, cy=0.0, dx=0.0;
@@ -694,6 +781,10 @@ int main(int argc, char** argv)
 				fprintf(stderr, ", %f", warp_params[u]);
 			}
 		}
+	}
+	if (grid)
+	{
+		fprintf(stderr, " GRID=%s", grid_spec.empty() ? "default" : grid_spec.c_str());
 	}
 
 	fputc('\n', stderr);
