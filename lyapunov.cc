@@ -7,7 +7,7 @@
 #include <cmath>
 #include <cstring>
 #include <string>
-#include <unistd.h> // for getopt()
+#include <getopt.h>
 #include <vector>
 #include <omp.h>
 
@@ -30,6 +30,7 @@ std::string type = "plain";
 std::string format = "pnm";
 std::string outfile;
 std::string post_frame_cmd;
+const char* progname = "lyapunov";
 
 double cmin = 2.5; // We go to 3rd dimension! \o/
 double cmax = 4.0; //
@@ -437,6 +438,55 @@ void print_format_help(FILE* f)
 	);
 }
 
+void print_help(FILE* f)
+{
+	fprintf(f,
+		"Generate a Lyapunov fractal as PPM or 3df to stdout.\n\n"
+		"Usage: %s [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]\n"
+		"     [-t fractal_type ] [-o output_filename_base] [-O format]\n"
+		"   { [-c center_x:center_y:size] | [-x min_x] [-X max_x] [-y min_y] [-Y max_y] } [-z min_z] [-Z max_z]\n"
+		"     [-C value] [-D value] [-E value] [-F value]\n"
+		"\n"
+		"\t-h, --help : print this help and exit\n"
+		"\t-W width, --width : width of image in pixel (default: %i)\n"
+		"\t-H height, --height : height of image in pixel (default: %i)\n"
+		"\t-f frames, --frames : number of frames or size in in z direction\n"
+		"\t-G start:end, --frame-range : render only the frames in the range [start, end) of the -f frames\n"
+		"\t                               (frame numbers and timing use the total -f count, useful for\n"
+		"\t                               rendering chunks in parallel; default: all frames)\n"
+		"\t-s seq, --sequence : AB or ABC sequence for fractal (default: \"%s\")\n"
+		"\t-i iter, --iterations : iterations per pixel (default: %i)\n"
+		"\n"
+		"\t-t type, --type : fractal type (default: %s, run \"-t help\" to get a list of types)\n"
+		"\t-o outfile, --output : basename of the output file (stdout if not given)\n"
+		"\t                      These patterns are replaced: {s}: sequence, {i}: iter, {f}: frame_nr\n"
+		"\t-r command, --post-frame-cmd : run a shell command after each written frame (pnm/ppm only, requires -o)\n"
+		"\t                               Patterns: {s}: sequence, {i}: iter, {f}: frame_nr, {o}: output file name\n"
+		"\t-O format, --format : either \"pnm\" for image (series) or \"3df\" for 3D voxel file (default: \"%s\")\n"
+		"\n"
+		"\t-c cx:cy:x_size, --center : center coordinates and size.\n"
+		"\t   The x, X, y and Y values will be calculated from them automatically:\n"
+		"\t-x min_x, --min-x : minimum x value (default: %f)\n"
+		"\t-X max_x, --max-x : maximum x value (default: %f)\n"
+		"\t-y min_y, --min-y : minimum y value (default: %f)\n"
+		"\t-Y max_y, --max-y : maximum y value (default: %f)\n"
+		"\t-z min_z, --min-z : 3rd dimension: (start) value of z. (selected by \"C\" in sequence string. default: %f)\n"
+		"\t-Z max_z, --max-z : maximum value of z (default: %f) \n"
+		"\t-C value, --dim-c : value for 3th dimension (default %f)\n"
+		"\t-D value, --dim-d : value for 4th dimension (default %f)\n"
+		"\t-E value, --dim-e : value for 5th dimension (default %f)\n"
+		"\n"
+		"\t-p params[,...], --params : comma-separated list of additional numerical parameters for -t\n"
+		"\t-w warp, --warp : warp of the image window (only with the flight types 6sides, wander, rotor;\n"
+		"\t                  supported: wavy, noise, inversion, mobius, swirl, twist, zoom)\n"
+		"\t-P params[,...], --warp-params : comma-separated list of numerical parameters for -w\n"
+		"\t-A, --animate-warp : animate the warp over the frames (see -t help)\n"
+		, progname, bsize, asize, seq.c_str(), nmax,
+		type.c_str(), format.c_str(),
+		bmin, bmax, amin, amax, cmin, cmax, cmin, valueD, valueE
+		);
+}
+
 std::vector<double> parse_params(const char* p)
 {
 	std::vector<double> params;
@@ -452,11 +502,43 @@ std::vector<double> parse_params(const char* p)
 }
 
 
+static const struct option long_options[] =
+{
+	{ "width",          required_argument, nullptr, 'W' },
+	{ "height",         required_argument, nullptr, 'H' },
+	{ "frames",         required_argument, nullptr, 'f' },
+	{ "frame-range",    required_argument, nullptr, 'G' },
+	{ "sequence",       required_argument, nullptr, 's' },
+	{ "iterations",     required_argument, nullptr, 'i' },
+	{ "type",           required_argument, nullptr, 't' },
+	{ "output",         required_argument, nullptr, 'o' },
+	{ "post-frame-cmd", required_argument, nullptr, 'r' },
+	{ "format",         required_argument, nullptr, 'O' },
+	{ "center",         required_argument, nullptr, 'c' },
+	{ "min-x",          required_argument, nullptr, 'x' },
+	{ "max-x",          required_argument, nullptr, 'X' },
+	{ "min-y",          required_argument, nullptr, 'y' },
+	{ "max-y",          required_argument, nullptr, 'Y' },
+	{ "min-z",          required_argument, nullptr, 'z' },
+	{ "max-z",          required_argument, nullptr, 'Z' },
+	{ "dim-c",          required_argument, nullptr, 'C' },
+	{ "dim-d",          required_argument, nullptr, 'D' },
+	{ "dim-e",          required_argument, nullptr, 'E' },
+	{ "dim-f",          required_argument, nullptr, 'F' },
+	{ "params",         required_argument, nullptr, 'p' },
+	{ "warp",           required_argument, nullptr, 'w' },
+	{ "warp-params",    required_argument, nullptr, 'P' },
+	{ "animate-warp",   no_argument,       nullptr, 'A' },
+	{ "help",           no_argument,       nullptr, 'h' },
+	{ nullptr,          0,                 nullptr, 0    }
+};
+
 int main(int argc, char** argv)
 {
 	const auto program_start = std::chrono::system_clock::now();
+	progname = argv[0];
 	int a;
-	while( (a=getopt(argc, argv, "W:H:f:c:x:y:z:X:Y:Z:s:i:o:O:t:C:D:E:F:p:G:r:w:P:A")) != -1 )
+	while( (a=getopt_long(argc, argv, "hW:H:f:c:x:y:z:X:Y:Z:s:i:o:O:t:C:D:E:F:p:G:r:w:P:A", long_options, nullptr)) != -1 )
 	{
 		switch(a)
 		{
@@ -464,7 +546,7 @@ int main(int argc, char** argv)
 				bsize = atoi(optarg);
 				if (bsize <= 0)
 				{
-					fprintf(stderr, "Option -W expects a positive width in pixel.\n");
+					fprintf(stderr, "Option -W/--width expects a positive width in pixel.\n");
 					return 2;
 				}
 				break;
@@ -472,7 +554,7 @@ int main(int argc, char** argv)
 				asize = atoi(optarg);
 				if (asize <= 0)
 				{
-					fprintf(stderr, "Option -H expects a positive height in pixel.\n");
+					fprintf(stderr, "Option -H/--height expects a positive height in pixel.\n");
 					return 2;
 				}
 				break;
@@ -503,60 +585,20 @@ int main(int argc, char** argv)
 				const char* colon = strchr(optarg, ':');
 				if (colon == nullptr)
 				{
-					fprintf(stderr, "Option -G expects start:end.\n");
+					fprintf(stderr, "Option -G/--frame-range expects start:end.\n");
 					return 2;
 				}
 				gstart = atoi(optarg);
 				gend = atoi(colon+1);
 				break;
 			}
+			case 'h':
+				print_help(stdout);
+				return 0;
 			case '?': [[fallthrough]];
 			default:
-				fprintf(stderr, 
-					"Generate a Lyapunov fractal as PPM or 3df to stdout.\n\n"
-					"Usage: %s [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]\n"
-					"     [-t fractal_type ] [-o output_filename_base] [-O format]\n"
-					"   { [-c center_x:center_y:size] | [-x min_x] [-X max_x] [-y min_y] [-Y max_y] } [-z min_z] [-Z max_z]\n"
-					"     [-C value] [-D value] [-E value] [-F value]\n"
-					"\n"
-					"\t-W width  : width of image in pixel (default: %i)\n"
-					"\t-H height : height of image in pixel (default: %i)\n"
-					"\t-f frames : number of frames or size in in z direction\n"
-					"\t-G start:end : render only the frames in the range [start, end) of the -f frames\n"
-					"\t             (frame numbers and timing use the total -f count, useful for\n"
-					"\t             rendering chunks in parallel; default: all frames)\n"
-					"\t-s seq    : AB or ABC sequence for fractal (default: \"%s\")\n"
-					"\t-i iter   : iterations per pixel (default: %i)\n"
-					"\n"
-					"\t-t type    : fractal type (default: %s, run \"-t help\" to get a list of types)\n"
-					"\t-o outfile : basename of the output file (stdout if not given)\n"
-					"\t             These patterns are replaced: {s}: sequence, {i}: iter, {f}: frame_nr\n"
-					"\t-r command : run a shell command after each written frame (pnm/ppm only, requires -o)\n"
-					"\t             Patterns: {s}: sequence, {i}: iter, {f}: frame_nr, {o}: output file name\n"
-					"\t-O format  : either \"pnm\" for image (series) or \"3df\" for 3D voxel file (default: \"%s\")\n"
-					"\n"
-					"\t-c cx:cy:x_size : center coordinates and size.\n"
-					"\t   The x, X, y and Y values will be calculated from them automatically:\n"
-					"\t-x min_x  : minimum x value (default: %f)\n"
-					"\t-X max_x  : maximum x value (default: %f)\n"
-					"\t-y min_y  : minimum y value (default: %f)\n"
-					"\t-Y max_y  : maximum y value (default: %f)\n"
-					"\t-z min_z  : 3rd dimension: (start) value of z. (selected by \"C\" in sequence string. default: %f)\n"
-					"\t-Z max_z  : maximum value of z (default: %f) \n"
-					"\t-C value  : value for 3th dimension (default %f)\n"
-					"\t-D value  : value for 4th dimension (default %f)\n"
-					"\t-E value  : value for 5th dimension (default %f)\n"
-					"\n"
-					"\t-p params[,...] : comma-separated list of additional numerical parameters for -t\n"
-					"\t-w warp    : warp of the image window (only with the flight types 6sides, wander, rotor;\n"
-					"\t             supported: wavy, noise, inversion, mobius, swirl, twist, zoom)\n"
-					"\t-P params[,...] : comma-separated list of numerical parameters for -w\n"
-					"\t-A         : animate the warp over the frames (see -t help)\n"
-					, argv[0], bsize, asize, seq.c_str(), nmax,
-					type.c_str(), format.c_str(),
-					bmin, bmax, amin, amax, cmin, cmax, cmin, valueD, valueE
-					);
-					return 1;
+				print_help(stderr);
+				return 1;
 		}
 	}
 	

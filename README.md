@@ -31,46 +31,47 @@ The executables end up in `build/`: `lyapunov`, `gen-ab-sequences`, `gen_zoom`, 
 
 ### Running
 ```
-Generate Lyapunov fractal(s) as PPM or 3df to stdout or file(s)
+Generate a Lyapunov fractal as PPM or 3df to stdout.
 
 Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
      [-t fractal_type ] [-o output_filename_base] [-O format]
    { [-c center_x:center_y:size] | [-x min_x] [-X max_x] [-y min_y] [-Y max_y] } [-z min_z] [-Z max_z]
      [-C value] [-D value] [-E value] [-F value]
 
-        -W width  : width of image in pixel (default: 800)
-        -H height : height of image in pixel (default: 800)
-        -f frames : number of frames or size in in z direction
-        -s seq    : AB or ABC sequence for fractal (default: "BBBABBAAAAAA")
-        -i iter   : iterations per pixel (default: 1000)
+	-h, --help : print this help and exit
+	-W width, --width : width of image in pixel (default: 800)
+	-H height, --height : height of image in pixel (default: 800)
+	-f frames, --frames : number of frames or size in in z direction
+	-G start:end, --frame-range : render only the frames in the range [start, end) of the -f frames
+	                               (frame numbers and timing use the total -f count, useful for
+	                               rendering chunks in parallel; default: all frames)
+	-s seq, --sequence : AB or ABC sequence for fractal (default: "BBBABBAAAAAA")
+	-i iter, --iterations : iterations per pixel (default: 1000)
 
-        -t type    : fractal type (default: plain, run "-t help" to get a list of types)
-        -o outfile : basename of the output file (stdout if not given)
-                     Can contain template patterns: {s}: sequence, {i}: iter, {f}: frame_nr
-        -r command : run a shell command after each written frame (pnm/ppm only, requires -o)
-                     Patterns: {s}: sequence, {i}: iter, {f}: frame_nr, {o}: output file name
-        -O format  : either "pnm" for image (series) or "3df" for 3D voxel file (default: "pnm")
+	-t type, --type : fractal type (default: plain, run "-t help" to get a list of types)
+	-o outfile, --output : basename of the output file (stdout if not given)
+	                      These patterns are replaced: {s}: sequence, {i}: iter, {f}: frame_nr
+	-r command, --post-frame-cmd : run a shell command after each written frame (pnm/ppm only, requires -o)
+	                               Patterns: {s}: sequence, {i}: iter, {f}: frame_nr, {o}: output file name
+	-O format, --format : either "pnm" for image (series) or "3df" for 3D voxel file (default: "pnm")
 
-        -p params[,...] : comma-separated list of additional numerical parameters for -t
-        -w warp    : warp of the image window, only with the flight types 6sides, wander, rotor
-                     (supported: wavy, noise, inversion, mobius, swirl, twist, zoom, see "Warps" below)
-        -P params[,...] : comma-separated list of numerical parameters for -w
-        -A         : animate the warp over the frames: its main effect (amplitude, twist
-                     angle, lens center) ramps up linearly from 0 (first frame) to the
-                     full -P value (last frame); supported by wavy, noise, mobius, swirl
-                     and twist (zoom is already animated, inversion has no sensible ramp)
+	-c cx:cy:x_size, --center : center coordinates and size.
+	   The x, X, y and Y values will be calculated from them automatically:
+	-x min_x, --min-x : minimum x value (default: 2.400000)
+	-X max_x, --max-x : maximum x value (default: 3.999000)
+	-y min_y, --min-y : minimum y value (default: 3.999000)
+	-Y max_y, --max-y : maximum y value (default: 2.400000)
+	-z min_z, --min-z : 3rd dimension: (start) value of z. (selected by "C" in sequence string. default: 2.500000)
+	-Z max_z, --max-z : maximum value of z (default: 4.000000)
+	-C value, --dim-c : value for 3th dimension (default 2.500000)
+	-D value, --dim-d : value for 4th dimension (default 3.700000)
+	-E value, --dim-e : value for 5th dimension (default 3.000000)
 
-        -c cx:cy:x_size : center coordinates and size.
-           The x, X, y and Y values will be calculated from them automatically:
-        -x min_x  : minimum x value (default: 2.400000)
-        -X max_x  : maximum x value (default: 3.999000)
-        -y min_y  : minimum y value (default: 3.999000)
-        -Y max_y  : maximum y value (default: 2.400000)
-        -z min_z  : 3rd dimension: (start) value of z. (selected by "C" in sequence string. default: 2.500000)
-        -Z max_z  : maximum value of z (default: 4.000000)
-        -C value  : value for 3th dimension (default 2.500000)
-        -D value  : value for 4th dimension (default 3.700000)
-        -E value  : value for 5th dimension (default 3.000000)
+	-p params[,...], --params : comma-separated list of additional numerical parameters for -t
+	-w warp, --warp : warp of the image window (only with the flight types 6sides, wander, rotor;
+	                  supported: wavy, noise, inversion, mobius, swirl, twist, zoom)
+	-P params[,...], --warp-params : comma-separated list of numerical parameters for -w
+	-A, --animate-warp : animate the warp over the frames (see -t help)
 ```
 
 <img src="seq-ABAAAAB.png" width="250" height="250" align="right" />
