@@ -45,6 +45,10 @@ Linux: g++/clang++).
   help-text/case blocks); keep new code consistent with the surroundings.
 - Small focused functions; comments only for non-obvious math (state the
   formula, not the trivial code).
+- Comments use C++ style (`//`); the repo still contains some legacy
+  `/* */` comments – do not add new ones. Exception: unused parameter
+  names are commented out inline as `/*name*/` (a `//` there would comment
+  out the rest of the line).
 
 ## Adding a new fractal type (checklist)
 
