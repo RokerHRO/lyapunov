@@ -14,6 +14,8 @@
 
 #include "fractal_type.hh"
 #include "string_case.hh"
+#include "rgb.hh"
+#include "draw.hh"
 
 #ifdef _WIN32
 #include <io.h>
@@ -76,11 +78,6 @@ std::unique_ptr<FractalType> fractal_type;
 double lambda_min = -2.55;
 double lambda_max = 0.3959;
 
-
-struct RGB
-{
-	uint8_t r,g,b;
-};
 
 RGB grid_fg{ 0xFF, 0xFF, 0xFF };
 RGB grid_bg{ 0x00, 0x00, 0x00 };
