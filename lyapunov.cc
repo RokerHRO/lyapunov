@@ -62,6 +62,9 @@ std::string warp_name;
 std::vector<double> warp_params;
 bool warp_animated = false;
 
+bool grid = false;
+std::string grid_spec;
+
 FILE* of = nullptr;
 std::unique_ptr<FractalType> fractal_type;
 
@@ -236,6 +239,10 @@ void lyapunov(std::vector<PXL>& img, const int max_iter, const std::string& sequ
 }
 
 
+void draw_coordinate_lines(std::vector<RGB>& /*img*/, const std::string& /*grid_spec*/)
+{
+}
+
 void make_ppm(const unsigned frame_nr)
 {
 	std::string outfile_ppm;
@@ -267,6 +274,8 @@ void make_ppm(const unsigned frame_nr)
 	fprintf( of,"P6\n");
 	fflush(of);
 	lyapunov(img, nmax, seq, *fractal_type, frame_nr);
+	if (grid)
+		draw_coordinate_lines(img, grid_spec);
 	fprintf(of, "# Lyapunov: '%s' max_iter=%d  seq='%s'  a=%f ... %f  b=%f ... %f ",
 		fractal_type->name(),
 		nmax, seq.c_str(), amin, amax, bmin, bmax);
@@ -481,6 +490,7 @@ void print_help(FILE* f)
 		"\t                  supported: wavy, noise, inversion, mobius, swirl, twist, zoom)\n"
 		"\t-P params[,...], --warp-params : comma-separated list of numerical parameters for -w\n"
 		"\t-A, --animate-warp : animate the warp over the frames (see -t help)\n"
+		"\t--grid[=spec] : draw and label coordinate lines on the rendered PPM frames (spec currently ignored)\n"
 		, progname, bsize, asize, seq.c_str(), nmax,
 		type.c_str(), format.c_str(),
 		bmin, bmax, amin, amax, cmin, cmax, cmin, valueD, valueE
@@ -501,6 +511,9 @@ std::vector<double> parse_params(const char* p)
 	return params;
 }
 
+
+// long-only options (no short form): values >= 256 can never collide with a short option
+enum LongOptions { OptGrid = 256 };
 
 static const struct option long_options[] =
 {
@@ -529,6 +542,7 @@ static const struct option long_options[] =
 	{ "warp",           required_argument, nullptr, 'w' },
 	{ "warp-params",    required_argument, nullptr, 'P' },
 	{ "animate-warp",   no_argument,       nullptr, 'A' },
+	{ "grid",           optional_argument, nullptr, OptGrid },
 	{ "help",           no_argument,       nullptr, 'h' },
 	{ nullptr,          0,                 nullptr, 0    }
 };
@@ -580,6 +594,7 @@ int main(int argc, char** argv)
 			case 'w': warp_name = optarg;   break;
 			case 'P': warp_params = parse_params(optarg); break;
 			case 'A': warp_animated = true;  break;
+			case OptGrid: grid = true; if (optarg) grid_spec = optarg; break;
 			case 'G':
 			{
 				const char* colon = strchr(optarg, ':');
