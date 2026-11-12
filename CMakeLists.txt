@@ -48,7 +48,9 @@ add_executable(gen_zoom gen_zoom.cc)
 add_executable(gen_poses gen_poses.cc
         fractal_type.cc)
 
+add_executable(generate_font generate_font.cc)
+
 add_executable(lissa_overview lissajous.cc lissa_overview.cc)
 
-install(TARGETS lyapunov gen_zoom gen-ab-sequences gen_poses lissa_overview
+install(TARGETS lyapunov gen_zoom gen-ab-sequences gen_poses generate_font lissa_overview
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
