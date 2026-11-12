@@ -73,9 +73,56 @@ void draw_line(std::vector<PXL>& img, const int width, const int height, int x0,
 	}
 }
 
+
 template <class PXL>
-void draw_text(std::vector<PXL>& /*img*/, const int /*width*/, const int /*height*/, const int /*x*/, const int /*y*/, const std::string& /*text*/, const PXL& /*fg*/, const PXL& /*bg*/, const int /*font_size*/)
+void draw_character(std::vector<PXL>& img, const int width, const int height,
+                    const int x, const int y,
+                    const char c, const PXL& color, const Font& font)
 {
+	// data[] only covers 0x20..0x7F; characters outside the range fall back to 0x7F
+	const unsigned char uc = static_cast<unsigned char>(c);
+	const int index = uc < 0x20 || uc > 0x7f ? 0x7f - 0x20 : uc - 0x20;
+	const uint16_t* glyph = &font.data[size_t(index) * font.height];
+	for (unsigned ry = 0; ry < font.height; ++ry)
+	{
+		const int iy = y + int(ry);
+		if (iy < 0 || iy >= height)
+			continue;
+		const uint16_t row = glyph[ry];
+		// row is MSB-first: pixel rx (0 = leftmost) is bit font.width-1-rx
+		for (unsigned rx = 0; rx < font.width; ++rx)
+		{
+			if ((row & (uint16_t(1) << (font.width - 1 - rx))) == 0)
+				continue;
+			const int ix = x + int(rx);
+			if (ix < 0 || ix >= width)
+				continue;
+			img[size_t(iy) * width + ix] = color;
+		}
+	}
+}
+
+
+template <class PXL>
+void draw_text(std::vector<PXL>& img, const int width, const int height,
+               const int x, const int y,
+               const std::string& text, const PXL& color, const Font& font)
+{
+	// '\n' continues at the original x, font.height further down
+	const int x0 = x;
+	int cx = x;
+	int cy = y;
+	for (const char c : text)
+	{
+		if (c == '\n')
+		{
+			cx = x0;
+			cy += int(font.height);
+			continue;
+		}
+		draw_character(img, width, height, cx, cy, c, color, font);
+		cx += int(font.width);
+	}
 }
 
 #endif // DRAW_HXX

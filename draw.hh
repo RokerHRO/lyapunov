@@ -1,23 +1,31 @@
 #ifndef DRAW_HH
 #define DRAW_HH
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
-#include "rgb.hh"
+
+struct Font
+{
+	unsigned width; // in pixel. max. 16 pixel supported
+	unsigned height;
+	const char* name;
+	const uint16_t* data; // contains only data for character codes 0x20 ... 0x7F.  'height' entries per character cell
+};
 
 // public interface: draw into a row-major pixel buffer of size_t(width) * height
 // pixels, x = column (to the right), y = row (downwards)
 template <class PXL>
-void draw_hline(std::vector<PXL>& img, const int width, const int height, const int x0, const int x1, const int y, const PXL& color);
+void draw_hline(std::vector<PXL>& img, int width, int height, int x0, int x1, int y, const PXL& color);
 
 template <class PXL>
-void draw_vline(std::vector<PXL>& img, const int width, const int height, const int x, const int y0, const int y1, const PXL& color);
+void draw_vline(std::vector<PXL>& img, int width, int height, int x, int y0, int y1, const PXL& color);
 
 template <class PXL>
-void draw_line(std::vector<PXL>& img, const int width, const int height, int x0, int y0, const int x1, const int y1, const PXL& color);
+void draw_line(std::vector<PXL>& img, int width, int height, int x0, int y0, int x1, int y1, const PXL& color);
 
 template <class PXL>
-void draw_text(std::vector<PXL>& img, const int width, const int height, const int x, const int y, const std::string& text, const PXL& fg, const PXL& bg, const int font_size);
+void draw_text(std::vector<PXL>& img, int width, int height, int x, int y, const std::string& text, const PXL& color, const Font& font);
 
 #endif // DRAW_HH
