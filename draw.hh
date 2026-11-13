@@ -32,4 +32,7 @@ void draw_line(std::vector<PXL>& img, int width, int height, int x0, int y0, int
 template <class PXL>
 void draw_text(std::vector<PXL>& img, int width, int height, int x, int y, const std::string& text, const PXL& color, const Font& font);
 
+template <class PXL>
+void draw_shaded_text(std::vector<PXL>& img, int width, int height, int x, int y, const std::string& text, const PXL& foreground, const PXL& shadow, const Font& font);
+
 #endif // DRAW_HH

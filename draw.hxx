@@ -125,4 +125,13 @@ void draw_text(std::vector<PXL>& img, const int width, const int height,
 	}
 }
 
+template <class PXL>
+void draw_shaded_text(std::vector<PXL>& img, int width, int height, int x, int y, const std::string& text, const PXL& foreground, const PXL& shadow, const Font& font)
+{
+	draw_text(img, width, height, x+1, y, text, shadow, font);
+	draw_text(img, width, height, x+1, y+1, text, shadow, font);
+	draw_text(img, width, height, x, y+1, text, shadow, font);
+	draw_text(img, width, height, x, y, text, foreground, font);
+}
+
 #endif // DRAW_HXX
