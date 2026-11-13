@@ -9,6 +9,7 @@
 #include <cstring>
 #include <string>
 #include <getopt.h>
+#include <utility>
 #include <vector>
 #include <omp.h>
 
@@ -68,7 +69,7 @@ bool warp_animated = false;
 bool grid = false;
 std::string grid_spec;
 enum GridSize { GridDense, GridMedium, GridSparse };
-int grid_font = 16;
+const Font* grid_font = nullptr; // set in main()
 GridSize grid_size = GridMedium;
 
 FILE* of = nullptr;
@@ -118,7 +119,7 @@ std::string expand_patterns(std::string tmpl, const unsigned frame_nr)
 
 std::string decorate_filename(std::string filename, const unsigned frame_nr)
 {
-	return expand_patterns(filename, frame_nr);
+	return expand_patterns(std::move(filename), frame_nr);
 }
 
 void run_post_frame_cmd(const std::string& out_name, const unsigned frame_nr)
@@ -173,9 +174,9 @@ void lyapunov(std::vector<PXL>& img, const int max_iter, const std::string& sequ
 	constexpr unsigned THREADS = 32;
 	double tvals[THREADS][5] = { };
 
-	for (unsigned t=0; t<THREADS; ++t)
+	for (auto & tval : tvals)
 	{
-		ftype.per_image(tvals[t], frame);
+		ftype.per_image(tval, frame);
 	}
 
 #pragma omp parallel for schedule(dynamic)
@@ -451,8 +452,22 @@ void print_format_help(FILE* f)
 	);
 }
 
+std::string font_names()
+{
+	std::string list;
+	for (const auto& f : fonts)
+	{
+		if (!list.empty()) list += ", ";
+		list += f.first;
+	}
+	return list;
+}
+
 void print_help(FILE* f)
 {
+	std::string font_list = font_names();
+	font_list += ", default: " + fonts.cbegin()->first;
+
 	fprintf(f,
 		"Generate a Lyapunov fractal as PPM or 3df to stdout.\n\n"
 		"Usage: %s [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]\n"
@@ -495,11 +510,12 @@ void print_help(FILE* f)
 		"\t-P params[,...], --warp-params : comma-separated list of numerical parameters for -w\n"
 		"\t-A, --animate-warp : animate the warp over the frames (see -t help)\n"
 		"\t--grid[=font,size,fg,bg] : draw and label coordinate lines on the rendered PPM frames\n"
-		"\t                           (font 16, 20, 24 or 32, default 16; grid size dense, medium or sparse, default medium;\n"
+		"\t                           (font: %s; grid size dense, medium or sparse, default medium;\n"
 		"\t                           fg/bg #RRGGBB, default #FFFFFF/#000000; trailing parameters may be omitted)\n"
 		, progname, bsize, asize, seq.c_str(), nmax,
 		type.c_str(), format.c_str(),
-		bmin, bmax, amin, amax, cmin, cmax, cmin, valueD, valueE
+		bmin, bmax, amin, amax, cmin, cmax, cmin, valueD, valueE,
+		font_list.c_str()
 		);
 }
 
@@ -559,11 +575,10 @@ void parse_grid_spec(const std::string& spec)
 		{
 			case 0:
 			{
-				char* end = nullptr;
-				const long v = strtol(t.c_str(), &end, 10);
-				if (end == t.c_str() || *end != '\0' || (v != 16 && v != 20 && v != 24 && v != 32))
-					throw std::invalid_argument("Invalid grid font size \"" + t + "\" (allowed: 16, 20, 24, 32).");
-				grid_font = v;
+				const auto f = fonts.find(t);
+				if (f == fonts.end())
+					throw std::invalid_argument("Invalid grid font \"" + t + "\" (allowed: " + font_names() + ").");
+				grid_font = f->second;
 				break;
 			}
 			case 1:
@@ -719,6 +734,7 @@ int main(int argc, char** argv)
 
 	if(grid)
 	{
+		grid_font = fonts.cbegin()->second; // default: first entry of fonts
 		try
 		{
 			parse_grid_spec(grid_spec);

@@ -32,7 +32,8 @@ add_executable(lyapunov lyapunov.cc
         fractal_type.cc
         draw-rgb.cc
         lissajous.cc
-        string_case.hh)
+        string_case.hh
+        fonts/fonts.cc)
 
 if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(lyapunov PRIVATE -fopenmp)
