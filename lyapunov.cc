@@ -633,7 +633,7 @@ static const struct option long_options[] =
 	{ nullptr,          0,                 nullptr, 0    }
 };
 
-int main(int argc, char** argv)
+int main(int argc, char** argv) try
 {
 	const auto program_start = std::chrono::system_clock::now();
 	progname = argv[0];
@@ -645,18 +645,12 @@ int main(int argc, char** argv)
 			case 'W':
 				bsize = atoi(optarg);
 				if (bsize <= 0)
-				{
-					fprintf(stderr, "Option -W/--width expects a positive width in pixel.\n");
-					return 2;
-				}
+					throw std::invalid_argument("Option -W/--width expects a positive width in pixel.");
 				break;
 			case 'H':
 				asize = atoi(optarg);
 				if (asize <= 0)
-				{
-					fprintf(stderr, "Option -H/--height expects a positive height in pixel.\n");
-					return 2;
-				}
+					throw std::invalid_argument("Option -H/--height expects a positive height in pixel.");
 				break;
 			case 'f': csize = atoi(optarg); setC = true; break;
 			case 'z': cmin  = atof(optarg); setC = true; break;
@@ -685,10 +679,7 @@ int main(int argc, char** argv)
 			{
 				const char* colon = strchr(optarg, ':');
 				if (colon == nullptr)
-				{
-					fprintf(stderr, "Option -G/--frame-range expects start:end.\n");
-					return 2;
-				}
+					throw std::invalid_argument("Option -G/--frame-range expects start:end.");
 				gstart = atoi(optarg);
 				gend = atoi(colon+1);
 				break;
@@ -707,43 +698,24 @@ int main(int argc, char** argv)
 	{
 		if(gend == 0) gend = csize; // no -G: render all frames
 		if(gstart < 0 || gend <= gstart || gend > csize)
-		{
-			fprintf(stderr, "Invalid frame range -G %d:%d (total frames: %d).\n", gstart, gend, csize);
-			return 2;
-		}
+			throw std::invalid_argument("Invalid frame range -G " + std::to_string(gstart) + ":" + std::to_string(gend) +
+			                             " (total frames: " + std::to_string(csize) + ").");
 	}
 
 	if(seq.empty())
-	{
-		fprintf(stderr, "Sequence must not be empty.\n");
-		return 2;
-	}
+		throw std::invalid_argument("Sequence must not be empty.");
 
 	const auto illegal = std::find_if(seq.begin(), seq.end(), [](char ch) { return ch < 'A' || ch > 'E'; });
 	if (illegal != seq.end())
-	{
-		fprintf(stderr, "Sequence \"%s\" contains illegal character '%c' (only 'A'..'E' are allowed).\n", seq.c_str(), *illegal);
-		return 2;
-	}
+		throw std::invalid_argument("Sequence \"" + seq + "\" contains illegal character '" + *illegal + "' (only 'A'..'E' are allowed).");
 
 	if(nmax <= 0)
-	{
-		fprintf(stderr, "max_iter must be > 0 (got %d).\n", nmax);
-		return 2;
-	}
+		throw std::invalid_argument("max_iter must be > 0 (got " + std::to_string(nmax) + ").");
 
 	if(grid)
 	{
 		grid_font = fonts.cbegin()->second; // default: first entry of fonts
-		try
-		{
-			parse_grid_spec(grid_spec);
-		}
-		catch (const std::invalid_argument& e)
-		{
-			fprintf(stderr, "%s\n", e.what());
-			return 2;
-		}
+		parse_grid_spec(grid_spec);
 	}
 
 	if(!center.empty())
@@ -751,10 +723,7 @@ int main(int argc, char** argv)
 		double cx=0.0, cy=0.0, dx=0.0;
 		const int ret = sscanf(center.c_str(), "%lg:%lg:%lg", &cx, &cy, &dx);
 		if(ret != 3)
-		{
-			fprintf(stderr, "Cannot parse \"%s\" as \"cx:cy:x_size\" parameter.\n", center.c_str());
-			return 2;
-		}
+			throw std::invalid_argument("Cannot parse \"" + center + "\" as \"cx:cy:x_size\" parameter.");
 		
 		const double dy = (dx * asize) / bsize;
 		bmin = cx - dx/2;
@@ -830,45 +799,24 @@ int main(int argc, char** argv)
 			case "wander"_case: [[fallthrough]];
 			case "rotor"_case:  break;
 			default:
-				fprintf(stderr, "Warp \"-w %s\" can only be combined with the flight types 6sides, wander and rotor (got type \"%s\").\n", warp_name.c_str(), type.c_str());
-				return 2;
+				throw std::invalid_argument("Warp \"-w " + warp_name + "\" can only be combined with the flight types 6sides, wander and rotor (got type \"" + type + "\").");
 		}
 	}
 	if (warp_animated && warp_name.empty())
-	{
-		fprintf(stderr, "Option -A (animate warp) requires -w <warp>.\n");
-		return 2;
-	}
+		throw std::invalid_argument("Option -A (animate warp) requires -w <warp>.");
 
-	try
-	{
-		std::unique_ptr<Warp> warp = warp_name.empty() ? nullptr : make_warp(warp_name, warp_params, warp_animated);
-		fractal_type = make_fractal_type(type, dim_a, dim_b, dim_c, valueD, valueE, params, std::move(warp));
-	}
-	catch (const std::invalid_argument& e)
-	{
-		fprintf(stderr, "%s\n", e.what());
-		return 2;
-	}
+	std::unique_ptr<Warp> warp = warp_name.empty() ? nullptr : make_warp(warp_name, warp_params, warp_animated);
+	fractal_type = make_fractal_type(type, dim_a, dim_b, dim_c, valueD, valueE, params, std::move(warp));
 
 	if (case_hash(format) == "3df"_case && csize <= 0)
-	{
-		fprintf(stderr, "3df output requires a z dimension: use -f <frames>.\n");
-		return 2;
-	}
+		throw std::invalid_argument("3df output requires a z dimension: use -f <frames>.");
 
 	if (!post_frame_cmd.empty())
 	{
 		if (outfile.empty())
-		{
-			fprintf(stderr, "Option -r (post frame command) requires -o <outfile>.\n");
-			return 2;
-		}
+			throw std::invalid_argument("Option -r (post frame command) requires -o <outfile>.");
 		if (case_hash(format) == "3df"_case)
-		{
-			fprintf(stderr, "Option -r (post frame command) is only supported with pnm/ppm output.\n");
-			return 2;
-		}
+			throw std::invalid_argument("Option -r (post frame command) is only supported with pnm/ppm output.");
 	}
 
 	switch (case_hash(format))
@@ -891,4 +839,9 @@ int main(int argc, char** argv)
 	ss << hms;
 
 	fprintf(stderr, "All done.\nTotal time: %s \n", ss.str().c_str());
+}
+catch (const std::invalid_argument& e)
+{
+	fprintf(stderr, "%s\n", e.what());
+	return 2;
 }
