@@ -520,8 +520,11 @@ public:
 	{}
 
 	void per_image(double values[5], unsigned frame) const override;
-	void per_line (double values[5], unsigned frame, unsigned line) const override;
-	void per_pixel(double values[5], unsigned frame, unsigned line, unsigned column) const override;
+	void per_line (double values[5], unsigned /*frame*/, unsigned /*line*/) const override;
+	void per_pixel(double values[5], unsigned /*frame*/, unsigned line, unsigned column) const override;
+	// (a, b) at normalized window coordinates x, y in [-0.5, 0.5]; uses the
+	// per-frame coefficients cached by per_image
+	void window_ab(double x, double y, double& a, double& b) const;
 	[[nodiscard]] const char* name() const override { return "zoom"; }
 
 private:

@@ -244,8 +244,173 @@ void lyapunov(std::vector<PXL>& img, const int max_iter, const std::string& sequ
 }
 
 
-void draw_coordinate_lines(std::vector<RGB>& /*img*/, const std::string& /*grid_spec*/)
+// round the raw step up to a "nice" step (1, 2 or 5 times a power of ten)
+double grid_step(const double raw)
 {
+	const double p = pow(10.0, floor(log10(raw)));
+	for (const double m : {1.0, 2.0, 5.0})
+		if (raw <= m * p)
+			return m * p;
+	return 10.0 * p;
+}
+
+std::string grid_label(const double value, const int decimals)
+{
+	char buf[32];
+	snprintf(buf, sizeof(buf), "%.*f", decimals, value);
+	return buf;
+}
+
+// a or b as a linear function of the continuous pixel position (px, py):
+// value = c0 + gx*px + gy*py
+struct GridField
+{
+	double c0, gx, gy;
+	double operator()(const double px, const double py) const { return c0 + gx*px + gy*py; }
+	std::pair<double, double> range(const double pxlo, const double pxhi, const double pylo, const double pyhi) const
+	{
+		double lo = (*this)(pxlo, pylo), hi = lo;
+		for (const auto& p : {std::pair{pxhi, pylo}, std::pair{pxlo, pyhi}, std::pair{pxhi, pyhi}})
+		{
+			const double v = (*this)(p.first, p.second);
+			lo = std::min(lo, v);
+			hi = std::max(hi, v);
+		}
+		return {lo, hi};
+	}
+};
+
+// intersect the line field(px, py) = value with the window rectangle
+bool grid_line_endpoints(const GridField& f, const double value,
+		const double pxlo, const double pxhi, const double pylo, const double pyhi,
+		double& x0, double& y0, double& x1, double& y1)
+{
+	const double v = value - f.c0;
+	constexpr double EPS = 1e-12;
+	double pts[2][2];
+	int n = 0;
+	if (n < 2 && std::abs(f.gy) > EPS)
+		for (const double px : {pxlo, pxhi})
+		{
+			const double py = (v - f.gx*px) / f.gy;
+			if (py >= pylo && py <= pyhi)
+			{
+				pts[n][0] = px;
+				pts[n][1] = py;
+				++n;
+			}
+		}
+	if (n < 2 && std::abs(f.gx) > EPS)
+		for (const double py : {pylo, pyhi})
+		{
+			const double px = (v - f.gy*py) / f.gx;
+			if (px >= pxlo && px <= pxhi)
+			{
+				pts[n][0] = px;
+				pts[n][1] = py;
+				++n;
+			}
+		}
+	if (n < 2)
+		return false;
+	x0 = pts[0][0]; y0 = pts[0][1];
+	x1 = pts[1][0]; y1 = pts[1][1];
+	return true;
+}
+
+// draw coordinate lines at "nice" values of the given parameter (a or b),
+// with labels; the lines are straight for all supported types
+void draw_grid_value_lines(std::vector<RGB>& img, const int W, const int H, const GridField& f,
+		const double lo, const double hi, const double step, const int decimals, const bool axis_a)
+{
+	const double pxlo = -0.5, pxhi = W - 0.5, pylo = -0.5, pyhi = H - 0.5;
+	const int n0 = (int)ceil(lo / step - 1e-9);
+	const int n1 = (int)floor(hi / step + 1e-9);
+	for (int n = n0; n <= n1; ++n)
+	{
+		const double value = n * step;
+		double x0, y0, x1, y1;
+		if (!grid_line_endpoints(f, value, pxlo, pxhi, pylo, pyhi, x0, y0, x1, y1))
+			continue;
+		draw_line(img, W, H, (int)x0, (int)y0, (int)x1, (int)y1, grid_fg);
+
+		const std::string text = grid_label(value, decimals);
+		const int tw = (int)text.size() * (int)grid_font->width;
+		const int th = (int)grid_font->height;
+		int lx, ly;
+		if (axis_a) // constant-a line: label near the left end
+		{
+			const bool left = x0 <= x1;
+			lx = (int)(left ? x0 : x1) + 2;
+			ly = (int)(left ? y0 : y1) - th / 2;
+		}
+		else // constant-b line: label near the bottom end
+		{
+			const bool bottom = y0 >= y1;
+			lx = (int)(bottom ? x0 : x1) - tw / 2;
+			ly = (int)(bottom ? y0 : y1) - th - 2;
+		}
+		lx = std::clamp(lx, 1, W - tw - 1);
+		ly = std::clamp(ly, 1, H - th - 1);
+		draw_shaded_text(img, W, H, lx, ly, text, grid_fg, grid_bg, *grid_font);
+	}
+}
+
+void draw_grid(std::vector<RGB>& img)
+{
+	// the grid is only supported for types with an affine (straight-line)
+	// mapping from the pixel position to the (a, b) parameter plane
+	switch (case_hash(fractal_type->name()))
+	{
+		case "plain"_case:  [[fallthrough]];
+		case "circle"_case: [[fallthrough]];
+		case "zoom"_case:   break;
+		default:
+			return;
+	}
+
+	const int W = bsize, H = asize;
+	const double pxlo = -0.5, pxhi = W - 0.5, pylo = -0.5, pyhi = H - 0.5;
+
+	// (a, b) at the continuous pixel position (px, py)
+	const auto ab_at = [&](const double px, const double py, double& a, double& b)
+	{
+		if (case_hash(fractal_type->name()) == "zoom"_case)
+		{
+			const auto& z = static_cast<const Zoom&>(*fractal_type);
+			z.window_ab(px / bsize - 0.5, py / asize - 0.5, a, b);
+			return;
+		}
+		// plain / circle: a runs along the lines, b along the columns
+		a = amin + (amax-amin) * (py / asize + 0.5);
+		b = bmin + (bmax-bmin) * (px / bsize + 0.5);
+	};
+
+	// linear coefficients by sampling: c0 at (0, 0), gradient from (1, 0) and (0, 1)
+	auto make_field = [&](const bool field_b) -> GridField
+	{
+		double a0, b0, a1, b1, a2, b2;
+		ab_at(0, 0, a0, b0);
+		ab_at(1, 0, a1, b1);
+		ab_at(0, 1, a2, b2);
+		if (field_b)
+			return {b0, b1 - b0, b2 - b0};
+		return {a0, a1 - a0, a2 - a0};
+	};
+	const GridField fa = make_field(false);
+	const GridField fb = make_field(true);
+
+	const auto ra = fa.range(pxlo, pxhi, pylo, pyhi);
+	const auto rb = fb.range(pxlo, pxhi, pylo, pyhi);
+
+	// target number of lines on the larger axis (grid_size)
+	const int target = grid_size == GridDense ? 50 : grid_size == GridSparse ? 10 : 20;
+	const double span = std::max(ra.second - ra.first, rb.second - rb.first);
+	const double step = grid_step(span / target);
+	const int decimals = std::max(0, (int)ceil(-log10(step) - 1e-9));
+
+	draw_grid_value_lines(img, W, H, fb, rb.first, rb.second, step, decimals, false);
+	draw_grid_value_lines(img, W, H, fa, ra.first, ra.second, step, decimals, true);
 }
 
 void make_ppm(const unsigned frame_nr)
@@ -280,7 +445,7 @@ void make_ppm(const unsigned frame_nr)
 	fflush(of);
 	lyapunov(img, nmax, seq, *fractal_type, frame_nr);
 	if (grid)
-		draw_coordinate_lines(img, grid_spec);
+		draw_grid(img);
 	fprintf(of, "# Lyapunov: '%s' max_iter=%d  seq='%s'  a=%f ... %f  b=%f ... %f ",
 		fractal_type->name(),
 		nmax, seq.c_str(), amin, amax, bmin, bmax);
