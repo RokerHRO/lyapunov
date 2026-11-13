@@ -287,6 +287,20 @@ void Flight::per_pixel(double values[5], unsigned frame, unsigned line, unsigned
 	values[2] = c.min + C01 * (c.max-c.min);
 }
 
+void Flight::window_ab(const double u, const double v, double& a_out, double& b_out) const
+{
+	const double A01 = pose.corner.x + u*pose.u_axis.x + v*pose.v_axis.x;
+	const double B01 = pose.corner.y + u*pose.u_axis.y + v*pose.v_axis.y;
+	a_out = a.min + A01 * (a.max-a.min);
+	b_out = b.min + B01 * (b.max-b.min);
+}
+
+double Flight::window_c(const double u, const double v) const
+{
+	const double C01 = pose.corner.z + u*pose.u_axis.z + v*pose.v_axis.z;
+	return c.min + C01 * (c.max-c.min);
+}
+
 WanderPath::WanderPath(const std::vector<double>& params)
 : keyframes(params.size() > 0 ? std::max(3u, unsigned(params[0])) : 6u)
 , scale(params.size() > 2 ? params[2] : 1.0)
