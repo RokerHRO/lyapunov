@@ -642,6 +642,12 @@ void Zoom::per_pixel(double values[5], unsigned /*frame*/, unsigned line, unsign
 	values[1] = center_b + b_x * x - b_y * y;
 }
 
+void Zoom::window_ab(const double x, const double y, double& a, double& b) const
+{
+	a = center_a + a_x * x + a_y * y;
+	b = center_b + b_x * x - b_y * y;
+}
+
 void Wavy::per_line(double /*values*/[5], unsigned /*frame*/, unsigned /*line*/) const
 {
 
