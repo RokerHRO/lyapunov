@@ -318,10 +318,14 @@ bool grid_line_endpoints(const GridField& f, const double value,
 	return true;
 }
 
-// draw coordinate lines at "nice" values of the given parameter (a or b),
+// where to place the label: at the end of the line at the left/bottom/top edge
+enum GridLabelEnd { LabelLeft, LabelBottom, LabelTop };
+
+// draw coordinate lines at "nice" values of the given parameter (a, b or c),
 // with labels; the lines are straight for all supported types
 void draw_grid_value_lines(std::vector<RGB>& img, const int W, const int H, const GridField& f,
-		const double lo, const double hi, const double step, const int decimals, const bool axis_a)
+		const double lo, const double hi, const double step, const int decimals,
+		const GridLabelEnd label_end, const RGB& fg)
 {
 	const double pxlo = -0.5, pxhi = W - 0.5, pylo = -0.5, pyhi = H - 0.5;
 	const int n0 = (int)ceil(lo / step - 1e-9);
@@ -332,76 +336,118 @@ void draw_grid_value_lines(std::vector<RGB>& img, const int W, const int H, cons
 		double x0, y0, x1, y1;
 		if (!grid_line_endpoints(f, value, pxlo, pxhi, pylo, pyhi, x0, y0, x1, y1))
 			continue;
-		draw_line(img, W, H, (int)x0, (int)y0, (int)x1, (int)y1, grid_fg);
+		draw_line(img, W, H, (int)x0, (int)y0, (int)x1, (int)y1, fg);
 
 		const std::string text = grid_label(value, decimals);
 		const int tw = (int)text.size() * (int)grid_font->width;
 		const int th = (int)grid_font->height;
 		int lx, ly;
-		if (axis_a) // constant-a line: label near the left end
+		if (label_end == LabelLeft) // constant-a line: label near the left end
 		{
 			const bool left = x0 <= x1;
 			lx = (int)(left ? x0 : x1) + 2;
 			ly = (int)(left ? y0 : y1) - th / 2;
 		}
-		else // constant-b line: label near the bottom end
+		else if (label_end == LabelBottom) // constant-b line: label near the bottom end
 		{
 			const bool bottom = y0 >= y1;
 			lx = (int)(bottom ? x0 : x1) - tw / 2;
 			ly = (int)(bottom ? y0 : y1) - th - 2;
 		}
+		else // constant-c line: label near the top end
+		{
+			const bool top = y0 <= y1;
+			lx = (int)(top ? x0 : x1) + 2;
+			ly = (int)(top ? y0 : y1) + 1;
+		}
 		lx = std::clamp(lx, 1, W - tw - 1);
 		ly = std::clamp(ly, 1, H - th - 1);
-		draw_shaded_text(img, W, H, lx, ly, text, grid_fg, grid_bg, *grid_font);
+		draw_shaded_text(img, W, H, lx, ly, text, fg, grid_bg, *grid_font);
 	}
 }
 
 void draw_grid(std::vector<RGB>& img)
 {
 	// the grid is only supported for types with an affine (straight-line)
-	// mapping from the pixel position to the (a, b) parameter plane
+	// mapping from the pixel position to the (a, b, c) parameter space
 	switch (case_hash(fractal_type->name()))
 	{
 		case "plain"_case:  [[fallthrough]];
 		case "circle"_case: [[fallthrough]];
-		case "zoom"_case:   break;
+		case "zoom"_case:   [[fallthrough]];
+		case "six_side"_case: [[fallthrough]];
+		case "wander"_case: [[fallthrough]];
+		case "rotor"_case:  break;
 		default:
 			return;
 	}
+	// a warp distorts u, v before the (affine) mapping: the lines would be curved
+	if (!warp_name.empty())
+		return;
 
 	const int W = bsize, H = asize;
 	const double pxlo = -0.5, pxhi = W - 0.5, pylo = -0.5, pyhi = H - 0.5;
 
-	// (a, b) at the continuous pixel position (px, py)
-	const auto ab_at = [&](const double px, const double py, double& a, double& b)
+	bool flight = false;
+	switch (case_hash(fractal_type->name()))
 	{
-		if (case_hash(fractal_type->name()) == "zoom"_case)
+		case "six_side"_case: [[fallthrough]];
+		case "wander"_case:   [[fallthrough]];
+		case "rotor"_case:    flight = true; break;
+		default: break;
+	}
+
+	// (a, b, c) at the continuous pixel position (px, py); c is only defined
+	// for the flight types (for the other types it is constant per frame)
+	const auto abc_at = [&](const double px, const double py, double& a, double& b, double& c)
+	{
+		switch (case_hash(fractal_type->name()))
 		{
-			const auto& z = static_cast<const Zoom&>(*fractal_type);
-			z.window_ab(px / bsize - 0.5, py / asize - 0.5, a, b);
-			return;
+			case "zoom"_case:
+			{
+				const auto& z = static_cast<const Zoom&>(*fractal_type);
+				z.window_ab(px / bsize - 0.5, py / asize - 0.5, a, b);
+				break;
+			}
+			case "six_side"_case: [[fallthrough]];
+			case "wander"_case: [[fallthrough]];
+			case "rotor"_case:
+			{
+				// the same (u, v) as in Flight::per_pixel (without warp)
+				const unsigned side = asize > bsize ? asize : bsize;
+				const double u = (px + 0.5 + (side - bsize) / 2) / side;
+				const double v = (py + 0.5 + (side - asize) / 2) / side;
+				const auto& f = static_cast<const Flight&>(*fractal_type);
+				f.window_ab(u, v, a, b);
+				c = f.window_c(u, v);
+				break;
+			}
+			default:
+				// plain / circle: a runs along the lines, b along the columns
+				a = amin + (amax-amin) * (py / asize + 0.5);
+				b = bmin + (bmax-bmin) * (px / bsize + 0.5);
+				break;
 		}
-		// plain / circle: a runs along the lines, b along the columns
-		a = amin + (amax-amin) * (py / asize + 0.5);
-		b = bmin + (bmax-bmin) * (px / bsize + 0.5);
+		if (!flight)
+			c = 0.0;
 	};
 
 	// linear coefficients by sampling: c0 at (0, 0), gradient from (1, 0) and (0, 1)
-	auto make_field = [&](const bool field_b) -> GridField
+	auto make_field = [&](const int which) -> GridField
 	{
-		double a0, b0, a1, b1, a2, b2;
-		ab_at(0, 0, a0, b0);
-		ab_at(1, 0, a1, b1);
-		ab_at(0, 1, a2, b2);
-		if (field_b)
-			return {b0, b1 - b0, b2 - b0};
-		return {a0, a1 - a0, a2 - a0};
+		double v0[3], v1[3], v2[3];
+		abc_at(0, 0, v0[0], v0[1], v0[2]);
+		abc_at(1, 0, v1[0], v1[1], v1[2]);
+		abc_at(0, 1, v2[0], v2[1], v2[2]);
+		return {v0[which], v1[which] - v0[which], v2[which] - v0[which]};
 	};
-	const GridField fa = make_field(false);
-	const GridField fb = make_field(true);
+	const GridField fa = make_field(0);
+	const GridField fb = make_field(1);
+	const GridField fc = flight ? make_field(2) : GridField{};
 
 	const auto ra = fa.range(pxlo, pxhi, pylo, pyhi);
 	const auto rb = fb.range(pxlo, pxhi, pylo, pyhi);
+	const auto rc = fc.range(pxlo, pxhi, pylo, pyhi);
 
 	// target number of lines on the larger axis (grid_size)
 	const int target = grid_size == GridDense ? 50 : grid_size == GridSparse ? 10 : 20;
@@ -409,8 +455,15 @@ void draw_grid(std::vector<RGB>& img)
 	const double step = grid_step(span / target);
 	const int decimals = std::max(0, (int)ceil(-log10(step) - 1e-9));
 
-	draw_grid_value_lines(img, W, H, fb, rb.first, rb.second, step, decimals, false);
-	draw_grid_value_lines(img, W, H, fa, ra.first, ra.second, step, decimals, true);
+	// per-axis colors derived from grid_fg: b halves the red channel, c halves
+	// the green channel (white fg -> #7fffff and #ff7fff)
+	const RGB fg_b{ uint8_t(grid_fg.r/2), grid_fg.g, grid_fg.b };
+	const RGB fg_c{ grid_fg.r, uint8_t(grid_fg.g/2), grid_fg.b };
+
+	if (flight)
+		draw_grid_value_lines(img, W, H, fc, rc.first, rc.second, step, decimals, LabelTop, fg_c);
+	draw_grid_value_lines(img, W, H, fb, rb.first, rb.second, step, decimals, LabelBottom, fg_b);
+	draw_grid_value_lines(img, W, H, fa, ra.first, ra.second, step, decimals, LabelLeft, grid_fg);
 }
 
 void make_ppm(const unsigned frame_nr)
@@ -676,7 +729,10 @@ void print_help(FILE* f)
 		"\t-A, --animate-warp : animate the warp over the frames (see -t help)\n"
 		"\t--grid[=font,size,fg,bg] : draw and label coordinate lines on the rendered PPM frames\n"
 		"\t                           (font: %s; grid size dense, medium or sparse, default medium;\n"
-		"\t                           fg/bg #RRGGBB, default #FFFFFF/#000000; trailing parameters may be omitted)\n"
+		"\t                           fg/bg #RRGGBB, default #FFFFFF/#000000; trailing parameters may be omitted).\n"
+		"\t                           Colors: a = fg, b = fg with the red channel halved (#7fffff for white);\n"
+		"\t                           for the flight types also c lines are drawn, using fg with the green\n"
+		"\t                           channel halved (#ff7fff for white)\n"
 		, progname, bsize, asize, seq.c_str(), nmax,
 		type.c_str(), format.c_str(),
 		bmin, bmax, amin, amax, cmin, cmax, cmin, valueD, valueE,

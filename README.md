@@ -74,7 +74,10 @@ Usage: lyapunov [-W width] [-H height] [-f frames] [-s sequence] [-i max_iter]
 	-A, --animate-warp : animate the warp over the frames (see -t help)
 	--grid[=font,size,fg,bg] : draw and label coordinate lines on the rendered PPM frames
 	                           (font 16, 20, 24 or 32, default 16; grid size dense, medium or sparse, default medium;
-	                           fg/bg #RRGGBB, default #FFFFFF/#000000; trailing parameters may be omitted)
+	                           fg/bg #RRGGBB, default #FFFFFF/#000000; trailing parameters may be omitted).
+	                           Colors: a = fg, b = fg with the red channel halved (#7fffff for white);
+	                           for the flight types also c lines are drawn, using fg with the green
+	                           channel halved (#ff7fff for white)
 ```
 
 <img src="seq-ABAAAAB.png" width="250" height="250" align="right" />
