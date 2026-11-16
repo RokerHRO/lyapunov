@@ -15,12 +15,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-struct Dimension
-{
-	unsigned size; // in pixel
-	double min;
-	double max;
-};
+#include "fractal_params.hh"
 
 struct SinCos { double s, c; };
 

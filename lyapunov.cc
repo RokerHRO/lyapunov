@@ -29,23 +29,12 @@
 //int seq[12] = {1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0};
 
 std::string center;
-std::string seq = "BBBABBAAAAAA";
 std::string type = "plain";
 std::string format = "pnm";
 std::string outfile;
 std::string post_frame_cmd;
 const char* progname = "lyapunov";
 
-double cmin = 2.5; // We go to 3rd dimension! \o/
-double cmax = 4.0; //
-
-double amin = 3.999;
-double amax = 2.4;
-double bmin = 2.4;
-double bmax = 3.999;
-
-double valueD = 3.7;
-double valueE = 3.0;
 double valueF = 3.0;
 
 bool setC = false;
@@ -53,13 +42,11 @@ bool setD = false;
 bool setE = false;
 bool setF = false;
 
-int asize = 800;
-int bsize = 800;
-int csize = 0;  // value >0 lets create 3df file instead of PPM
-int gstart = 0; // first frame to render (0-based, of the csize frames)
+// all parameters of the fractal computation (documented and defaulted in
+// fractal_params.hh)
+FractalParams fractal_params;
+int gstart = 0; // first frame to render (0-based, of the c.size frames)
 int gend = 0;   // one past the last frame to render (0: render all frames)
-
-int nmax = 1000;                /* number of rounds */
 
 std::vector<double> params;
 std::string warp_name;
@@ -74,10 +61,6 @@ GridSize grid_size = GridMedium;
 
 FILE* of = nullptr;
 std::unique_ptr<FractalType> fractal_type;
-
-/* for color generation; somewhat empirical, in order to match Wickerprint's original colors */
-double lambda_min = -2.55;
-double lambda_max = 0.3959;
 
 
 RGB grid_fg{ 0xFF, 0xFF, 0xFF };
@@ -97,22 +80,22 @@ std::string replace_all(std::string orig, std::string_view search, std::string_v
 }
 
 
-// no animation (csize==0): {f} expands to the empty string, otherwise
+// no animation (c.size==0): {f} expands to the empty string, otherwise
 // zero-padded to the width of the last frame number
 std::string frame_nr_to_string(const unsigned frame_nr)
 {
-	if (csize == 0)
+	if (fractal_params.c.size == 0)
 		return {};
 	char buf[16] = {};
-	const unsigned digits = snprintf(nullptr, 0, "%u", csize-1);
+	const unsigned digits = snprintf(nullptr, 0, "%u", fractal_params.c.size-1);
 	snprintf(buf, sizeof(buf), "%0*u", digits, frame_nr);
 	return buf;
 }
 
 std::string expand_patterns(std::string tmpl, const unsigned frame_nr)
 {
-	tmpl = replace_all(tmpl, "{s}", seq);
-	tmpl = replace_all(tmpl, "{i}", std::to_string(nmax));
+	tmpl = replace_all(tmpl, "{s}", fractal_params.sequence);
+	tmpl = replace_all(tmpl, "{i}", std::to_string(fractal_params.max_iter));
 	tmpl = replace_all(tmpl, "{f}", frame_nr_to_string(frame_nr));
 	return tmpl;
 }
@@ -135,18 +118,18 @@ void run_post_frame_cmd(const std::string& out_name, const unsigned frame_nr)
 }
 
 template<class PXL>
-PXL lambda2pxl(double lambda);
+PXL lambda2pxl(double lambda, const FractalParams& params);
 
 template<>
-RGB lambda2pxl<RGB>(const double lambda)
+RGB lambda2pxl<RGB>(const double lambda, const FractalParams& params)
 {
 	double r=0,g=0,b=0;
 	if (lambda > 0)
 	{
-		b = lambda/lambda_max;
+		b = lambda/params.lambda_max;
 	} else {
-		r = 1 - pow(lambda/lambda_min, 2/3.0);
-		g = 1 - pow(lambda/lambda_min, 1/3.0);
+		r = 1 - pow(lambda/params.lambda_min, 2/3.0);
+		g = 1 - pow(lambda/params.lambda_min, 1/3.0);
 		b = 0;
 	}
 
@@ -158,7 +141,7 @@ RGB lambda2pxl<RGB>(const double lambda)
 }
 
 template<>
-uint8_t lambda2pxl<uint8_t>(const double lambda)
+uint8_t lambda2pxl<uint8_t>(const double lambda, const FractalParams& /*params*/)
 {
 	return CLAMP( 127 - lambda*100 );
 }
@@ -166,10 +149,10 @@ uint8_t lambda2pxl<uint8_t>(const double lambda)
 
 // extension: 3rd dimension: value c is fixed, selected by 'C' in sequence string
 template<class PXL>
-void lyapunov(std::vector<PXL>& img, const int max_iter, const std::string& sequence, const FractalType& ftype, const unsigned frame)
+void lyapunov(std::vector<PXL>& img, const FractalParams& params, const FractalType& ftype, const unsigned frame)
 {
-	const int height = asize;
-	const int width  = bsize;
+	const int height = int(params.a.size);
+	const int width  = int(params.b.size);
 
 	constexpr unsigned THREADS = 32;
 	double tvals[THREADS][5] = { };
@@ -184,29 +167,25 @@ void lyapunov(std::vector<PXL>& img, const int max_iter, const std::string& sequ
 	{
 		const int tn = omp_get_thread_num();
 		double* vals = tvals[tn];
-//		const double a = amin + (amax-amin)/height*(ai+0.5);
-//		vals[0] = amin + (amax-amin)/height*(ai+0.5);
 		ftype.per_line(vals, frame, ai);
 
 		fprintf(stderr, "\r%4d of %4d   ", ai, height);
 		for (int bi = 0; bi < width; ++bi)
 		{
-//			const double b = bmin + (bmax-bmin)/width*(bi+0.5);
-//			vals[1] = bmin + (bmax-bmin)/width*(bi+0.5);
 			ftype.per_pixel(vals, frame, ai, bi);
 
 			double x = 0.5;
 			/* one round without derivating, so that the value 0.5 is avoided */
-			for (unsigned m = 0; m < sequence.length(); m++)
+			for (unsigned m = 0; m < params.sequence.length(); m++)
 			{
-				const char ch = sequence[m];
+				const char ch = params.sequence[m];
 				const double r = vals[ch-'A']; //ch=='B' ? b : (ch=='A' ? a : c);
 				x = r*x*(1-x);
 			}
 			double sum_log_deriv = 0;
 			double prod_deriv = 1;
 			bool diverged = false;
-			for (int n = 0; n < max_iter; n++)
+			for (int n = 0; n < params.max_iter; n++)
 			{
 				/* [0,1] is invariant for r in (0,4): once the orbit leaves it, it
 				   runs off to -infinity and lambda -> +infinity (pure blue), so
@@ -217,9 +196,9 @@ void lyapunov(std::vector<PXL>& img, const int max_iter, const std::string& sequ
 					break;
 				}
 				double round_deriv = 1;
-				for (unsigned m = 0; m < sequence.length(); m++)
+				for (unsigned m = 0; m < params.sequence.length(); m++)
 				{
-					const char ch = sequence[m];
+					const char ch = params.sequence[m];
 					const double r = vals[ch-'A']; // ch=='B' ? b : (ch=='A' ? a : c);
 					round_deriv *= r*(1-2*x);
 					x = r*x*(1-x);
@@ -229,14 +208,14 @@ void lyapunov(std::vector<PXL>& img, const int max_iter, const std::string& sequ
 				   (one per round is what the old code did, one per pixel usually) */
 				prod_deriv *= round_deriv;
 				const double a = fabs(prod_deriv);
-				if (a > 1e100 || a < 1e-100 || n == max_iter-1)
+				if (a > 1e100 || a < 1e-100 || n == params.max_iter-1)
 				{
 					sum_log_deriv += log(a);
 					prod_deriv = 1;
 				}
 			}
-			const double lambda = diverged ? 1e30 : sum_log_deriv / (max_iter*sequence.length());
-			img[size_t(ai) * width + bi] = lambda2pxl<PXL>(lambda);
+			const double lambda = diverged ? 1e30 : sum_log_deriv / (params.max_iter*params.sequence.length());
+			img[size_t(ai) * width + bi] = lambda2pxl<PXL>(lambda, params);
 		}
 	}
 	
@@ -496,7 +475,7 @@ void draw_grid(std::vector<RGB>& img)
 	if (!warp_name.empty())
 		return;
 
-	const int W = bsize, H = asize;
+	const int W = int(fractal_params.b.size), H = int(fractal_params.a.size);
 	const double pxlo = -0.5, pxhi = W - 0.5, pylo = -0.5, pyhi = H - 0.5;
 
 	bool flight = false, tileable = false;
@@ -520,7 +499,7 @@ void draw_grid(std::vector<RGB>& img)
 			{
 				// the same (x, y) as in Zoom::per_pixel, continuous in px, py
 				const auto& z = static_cast<const Zoom&>(*fractal_type);
-				z.window_ab((px + 0.5) / bsize - 0.5, (py + 0.5) / asize - 0.5, a, b);
+				z.window_ab((px + 0.5) / W - 0.5, (py + 0.5) / H - 0.5, a, b);
 				break;
 			}
 			case "six_side"_case: [[fallthrough]];
@@ -528,9 +507,9 @@ void draw_grid(std::vector<RGB>& img)
 			case "rotor"_case:
 			{
 				// the same (u, v) as in Flight::per_pixel (without warp)
-				const unsigned side = asize > bsize ? asize : bsize;
-				const double u = (px + 0.5 + (side - bsize) / 2) / side;
-				const double v = (py + 0.5 + (side - asize) / 2) / side;
+				const unsigned side = H > W ? H : W;
+				const double u = (px + 0.5 + (side - W) / 2) / side;
+				const double v = (py + 0.5 + (side - H) / 2) / side;
 				const auto& f = static_cast<const Flight&>(*fractal_type);
 				f.window_ab(u, v, a, b);
 				c = f.window_c(u, v);
@@ -539,8 +518,8 @@ void draw_grid(std::vector<RGB>& img)
 			default:
 				// plain / circle: a runs along the lines, b along the columns
 				// (the same (line, column) mapping as in SimpleFractalType)
-				a = amin + (amax-amin) * (py + 0.5) / asize;
-				b = bmin + (bmax-bmin) * (px + 0.5) / bsize;
+				a = fractal_params.a.min + (fractal_params.a.max-fractal_params.a.min) * (py + 0.5) / H;
+				b = fractal_params.b.min + (fractal_params.b.max-fractal_params.b.min) * (px + 0.5) / W;
 				break;
 		}
 		if (!flight)
@@ -563,8 +542,8 @@ void draw_grid(std::vector<RGB>& img)
 	std::pair<double, double> ra, rb;
 	if (tileable) // one full period: the window covers the whole a/b range
 	{
-		ra = { std::min(amin, amax), std::max(amin, amax) };
-		rb = { std::min(bmin, bmax), std::max(bmin, bmax) };
+		ra = { std::min(fractal_params.a.min, fractal_params.a.max), std::max(fractal_params.a.min, fractal_params.a.max) };
+		rb = { std::min(fractal_params.b.min, fractal_params.b.max), std::max(fractal_params.b.min, fractal_params.b.max) };
 	}
 	else
 	{
@@ -588,8 +567,8 @@ void draw_grid(std::vector<RGB>& img)
 		draw_grid_value_lines(img, W, H, fc, rc.first, rc.second, step, decimals, LabelTop, fg_c);
 	if (tileable)
 	{
-		draw_grid_sinus_axis(img, W, H, AxisB, (bmin + bmax) / 2, (bmax - bmin) / 2, rb.first, rb.second, step, decimals, LabelBottom, fg_b);
-		draw_grid_sinus_axis(img, W, H, AxisA, (amin + amax) / 2, (amax - amin) / 2, ra.first, ra.second, step, decimals, LabelLeft, grid_fg);
+		draw_grid_sinus_axis(img, W, H, AxisB, (fractal_params.b.min + fractal_params.b.max) / 2, (fractal_params.b.max - fractal_params.b.min) / 2, rb.first, rb.second, step, decimals, LabelBottom, fg_b);
+		draw_grid_sinus_axis(img, W, H, AxisA, (fractal_params.a.min + fractal_params.a.max) / 2, (fractal_params.a.max - fractal_params.a.min) / 2, ra.first, ra.second, step, decimals, LabelLeft, grid_fg);
 	}
 	else
 	{
@@ -623,31 +602,32 @@ void make_ppm(const unsigned frame_nr)
 
 	// RGB image:
 	std::vector<RGB> img;
-	img.resize(size_t(asize) * bsize);
+	img.resize(fractal_params.a.size * fractal_params.b.size);
 
 	// PPM header
 	fprintf( of,"P6\n");
 	fflush(of);
-	lyapunov(img, nmax, seq, *fractal_type, frame_nr);
+	lyapunov(img, fractal_params, *fractal_type, frame_nr);
 	if (grid)
 		draw_grid(img);
 	fprintf(of, "# Lyapunov: '%s' max_iter=%d  seq='%s'  a=%f ... %f  b=%f ... %f ",
 		fractal_type->name(),
-		nmax, seq.c_str(), amin, amax, bmin, bmax);
+		fractal_params.max_iter, fractal_params.sequence.c_str(),
+		fractal_params.a.min, fractal_params.a.max, fractal_params.b.min, fractal_params.b.max);
 
-	if(setC) fprintf(of, " frame=%u/%u  C=%f ... %f", frame_nr, csize, cmin, cmax);
-	if(setD) fprintf(of, " D=%f", valueD);
-	if(setE) fprintf(of, " E=%f", valueE);
+	if(setC) fprintf(of, " frame=%u/%u  C=%f ... %f", frame_nr, fractal_params.c.size, fractal_params.c.min, fractal_params.c.max);
+	if(setD) fprintf(of, " D=%f", fractal_params.d);
+	if(setE) fprintf(of, " E=%f", fractal_params.e);
 	if(setF) fprintf(of, " F=%f", valueF);
 	
 	fprintf(of, "\n"
 		"%d %d 255\n",
-		bsize, asize
+		int(fractal_params.b.size), int(fractal_params.a.size)
 		);
 	
-	for (int ai = 0; ai < asize; ++ai)
+	for (int ai = 0; ai < int(fractal_params.a.size); ++ai)
 	{
-		fwrite(&img[size_t(ai) * bsize], sizeof(RGB), bsize, of);
+		fwrite(&img[size_t(ai) * fractal_params.b.size], sizeof(RGB), fractal_params.b.size, of);
 	}
 	fflush(of);
 
@@ -661,7 +641,7 @@ void make_ppm(const unsigned frame_nr)
 
 void make_ppm()
 {
-	if (csize==0)
+	if (fractal_params.c.size==0)
 	{
 		make_ppm(0);
 	}else for (int frame_nr=gstart; frame_nr < gend; ++frame_nr)
@@ -673,9 +653,9 @@ void make_ppm()
 inline
 uint8_t get(const std::vector<std::vector<uint8_t>>& img, const int x, const int y, const int z)
 {
-	if( unsigned(y) >= unsigned(asize) ) return 0;
-	if( unsigned(x) >= unsigned(bsize) ) return 0;
-	return img[z][size_t(y) * bsize + x];
+	if( unsigned(y) >= fractal_params.a.size ) return 0;
+	if( unsigned(x) >= fractal_params.b.size ) return 0;
+	return img[z][size_t(y) * fractal_params.b.size + x];
 }
 
 
@@ -694,25 +674,25 @@ void make_3df()
 	}
 	// 3df header
 	fprintf(of, "%c%c%c%c%c%c",
-		bsize >> 8, bsize & 255,
-		asize >> 8, asize & 255,
-		csize >> 8, csize & 255
+		fractal_params.b.size >> 8, fractal_params.b.size & 255,
+		fractal_params.a.size >> 8, fractal_params.a.size & 255,
+		fractal_params.c.size >> 8, fractal_params.c.size & 255
 	);
 	fflush(of);
 	
 	// 3 images:
 	std::vector<std::vector<uint8_t>> img;
-	img.resize(3, std::vector<uint8_t>(size_t(asize) * bsize));
+	img.resize(3, std::vector<uint8_t>(fractal_params.a.size * fractal_params.b.size));
 	
-	for(int ci=0; ci<csize; ++ci)
+	for(int ci=0; ci<int(fractal_params.c.size); ++ci)
 	{
-		const double c = (csize > 1) ? cmin + (cmax-cmin)/(csize-1)*ci : (cmin+cmax)/2;
-		fprintf(stderr, "Frame %i of %i. c=%f \n", ci, csize, c);
-		lyapunov(img[2], nmax, seq, *fractal_type, ci);
+		const double c = (fractal_params.c.size > 1) ? fractal_params.c.min + (fractal_params.c.max-fractal_params.c.min)/int(fractal_params.c.size-1)*ci : (fractal_params.c.min+fractal_params.c.max)/2;
+		fprintf(stderr, "Frame %i of %i. c=%f \n", ci, int(fractal_params.c.size), c);
+		lyapunov(img[2], fractal_params, *fractal_type, ci);
 		
 		fprintf(stderr,"\tblurring...\n");
-		for(int y=0; y<asize; ++y)
-		for(int x=0; x<bsize; ++x)
+		for(int y=0; y<int(fractal_params.a.size); ++y)
+		for(int x=0; x<int(fractal_params.b.size); ++x)
 		{
 			unsigned u = 0;
 			for(int z=0; z<3; ++z)
@@ -866,9 +846,10 @@ void print_help(FILE* f)
 		"\t                           Colors: a = fg, b = fg with the red channel halved (#7fffff for white);\n"
 		"\t                           for the flight types also c lines are drawn, using fg with the green\n"
 		"\t                           channel halved (#ff7fff for white)\n"
-		, progname, bsize, asize, seq.c_str(), nmax,
+		, progname, int(fractal_params.b.size), int(fractal_params.a.size), fractal_params.sequence.c_str(), fractal_params.max_iter,
 		type.c_str(), format.c_str(),
-		bmin, bmax, amin, amax, cmin, cmax, cmin, valueD, valueE,
+		fractal_params.b.min, fractal_params.b.max, fractal_params.a.min, fractal_params.a.max,
+		fractal_params.c.min, fractal_params.c.max, fractal_params.c.min, fractal_params.d, fractal_params.e,
 		font_list.c_str()
 		);
 }
@@ -991,37 +972,52 @@ int main(int argc, char** argv) try
 {
 	const auto program_start = std::chrono::system_clock::now();
 	progname = argv[0];
+
 	int a;
 	while( (a=getopt_long(argc, argv, "hW:H:f:c:x:y:z:X:Y:Z:s:i:o:O:t:C:D:E:F:p:G:r:w:P:A", long_options, nullptr)) != -1 )
 	{
 		switch(a)
 		{
 			case 'W':
-				bsize = atoi(optarg);
-				if (bsize <= 0)
+			{
+				const int w = atoi(optarg);
+				if (w <= 0)
 					throw std::invalid_argument("Option -W/--width expects a positive width in pixel.");
+				fractal_params.b.size = unsigned(w);
 				break;
+			}
 			case 'H':
-				asize = atoi(optarg);
-				if (asize <= 0)
+			{
+				const int h = atoi(optarg);
+				if (h <= 0)
 					throw std::invalid_argument("Option -H/--height expects a positive height in pixel.");
+				fractal_params.a.size = unsigned(h);
 				break;
-			case 'f': csize = atoi(optarg); setC = true; break;
-			case 'z': cmin  = atof(optarg); setC = true; break;
-			case 'Z': cmax  = atof(optarg); setC = true; break;
+			}
+			case 'f':
+			{
+				const int f = atoi(optarg);
+				if (f < 0)
+					throw std::invalid_argument("Option -f/--frames expects a non-negative frame count.");
+				fractal_params.c.size = unsigned(f);
+				setC = true;
+				break;
+			}
+			case 'z': fractal_params.c.min  = atof(optarg); setC = true; break;
+			case 'Z': fractal_params.c.max  = atof(optarg); setC = true; break;
 			case 'c': center = optarg;      break;
-			case 'x': bmin = atof(optarg);  break;
-			case 'y': amin = atof(optarg);  break;
-			case 'X': bmax = atof(optarg);  break;
-			case 'Y': amax = atof(optarg);  break;
-			case 's': seq = optarg;         break;
-			case 'i': nmax = atoi(optarg);  break;
+			case 'x': fractal_params.b.min = atof(optarg);  break;
+			case 'y': fractal_params.a.min = atof(optarg);  break;
+			case 'X': fractal_params.b.max = atof(optarg);  break;
+			case 'Y': fractal_params.a.max = atof(optarg);  break;
+			case 's': fractal_params.sequence = optarg;     break;
+			case 'i': fractal_params.max_iter = atoi(optarg); break;
 			case 't': type = optarg;        break;
 			case 'o': outfile = optarg;     break;
 			case 'O': format = optarg;      break;
-			case 'C': cmin   = atof(optarg); setC = true; break;
-			case 'D': valueD = atof(optarg); setD = true; break;
-			case 'E': valueE = atof(optarg); setE = true; break;
+			case 'C': fractal_params.c.min   = atof(optarg); setC = true; break;
+			case 'D': fractal_params.d = atof(optarg); setD = true; break;
+			case 'E': fractal_params.e = atof(optarg); setE = true; break;
 			case 'F': valueF = atof(optarg); setF = true; break;
 			case 'p': params = parse_params(optarg); break;
 			case 'r': post_frame_cmd = optarg; break;
@@ -1048,23 +1044,23 @@ int main(int argc, char** argv) try
 		}
 	}
 	
-	if(csize > 0)
+	if(fractal_params.c.size > 0)
 	{
-		if(gend == 0) gend = csize; // no -G: render all frames
-		if(gstart < 0 || gend <= gstart || gend > csize)
+		if(gend == 0) gend = int(fractal_params.c.size); // no -G: render all frames
+		if(gstart < 0 || gend <= gstart || gend > int(fractal_params.c.size))
 			throw std::invalid_argument("Invalid frame range -G " + std::to_string(gstart) + ":" + std::to_string(gend) +
-			                             " (total frames: " + std::to_string(csize) + ").");
+			                             " (total frames: " + std::to_string(int(fractal_params.c.size)) + ").");
 	}
 
-	if(seq.empty())
+	if(fractal_params.sequence.empty())
 		throw std::invalid_argument("Sequence must not be empty.");
 
-	const auto illegal = std::find_if(seq.begin(), seq.end(), [](char ch) { return ch < 'A' || ch > 'E'; });
-	if (illegal != seq.end())
-		throw std::invalid_argument("Sequence \"" + seq + "\" contains illegal character '" + *illegal + "' (only 'A'..'E' are allowed).");
+	const auto illegal = std::find_if(fractal_params.sequence.begin(), fractal_params.sequence.end(), [](char ch) { return ch < 'A' || ch > 'E'; });
+	if (illegal != fractal_params.sequence.end())
+		throw std::invalid_argument("Sequence \"" + fractal_params.sequence + "\" contains illegal character '" + *illegal + "' (only 'A'..'E' are allowed).");
 
-	if(nmax <= 0)
-		throw std::invalid_argument("max_iter must be > 0 (got " + std::to_string(nmax) + ").");
+	if(fractal_params.max_iter <= 0)
+		throw std::invalid_argument("max_iter must be > 0 (got " + std::to_string(fractal_params.max_iter) + ").");
 
 	if(grid)
 	{
@@ -1079,20 +1075,21 @@ int main(int argc, char** argv) try
 		if(ret != 3)
 			throw std::invalid_argument("Cannot parse \"" + center + "\" as \"cx:cy:x_size\" parameter.");
 		
-		const double dy = (dx * asize) / bsize;
-		bmin = cx - dx/2;
-		bmax = cx + dx/2;
-		amin = cy + dy/2;
-		amax = cy - dy/2;
+		const double dy = (dx * int(fractal_params.a.size)) / int(fractal_params.b.size);
+		fractal_params.b.min = cx - dx/2;
+		fractal_params.b.max = cx + dx/2;
+		fractal_params.a.min = cy + dy/2;
+		fractal_params.a.max = cy - dy/2;
 		
 		fprintf(stderr, "Interval calculated from \"-c %s\" ", center.c_str());
 	}
 
-	fprintf(stderr, " min_x=%11.9f  max_x=%11.9f  min_y=%11.9f  max_y=%11.9f", bmin, bmax, amin, amax);
+	fprintf(stderr, " min_x=%11.9f  max_x=%11.9f  min_y=%11.9f  max_y=%11.9f",
+		fractal_params.b.min, fractal_params.b.max, fractal_params.a.min, fractal_params.a.max);
 
-	if(setC) fprintf(stderr, " C=%f ... %f", cmin, cmax);
-	if(setD) fprintf(stderr, " D=%f", valueD);
-	if(setE) fprintf(stderr, " E=%f", valueE);
+	if(setC) fprintf(stderr, " C=%f ... %f", fractal_params.c.min, fractal_params.c.max);
+	if(setD) fprintf(stderr, " D=%f", fractal_params.d);
+	if(setE) fprintf(stderr, " E=%f", fractal_params.e);
 	if(setF) fprintf(stderr, " F=%f", valueF);
 	if (!params.empty())
 	{
@@ -1134,10 +1131,6 @@ int main(int argc, char** argv) try
 	setmode(fileno(stdin),O_BINARY);
 #endif
 
-	const Dimension dim_a{unsigned(asize), amin, amax};
-	const Dimension dim_b{unsigned(bsize), bmin, bmax};
-	const Dimension dim_c{unsigned(csize), cmin, cmax};
-
 	switch (case_hash(type))
 	{
 		case "help"_case   : [[fallthrough]];
@@ -1160,9 +1153,10 @@ int main(int argc, char** argv) try
 		throw std::invalid_argument("Option -A (animate warp) requires -w <warp>.");
 
 	std::unique_ptr<Warp> warp = warp_name.empty() ? nullptr : make_warp(warp_name, warp_params, warp_animated);
-	fractal_type = make_fractal_type(type, dim_a, dim_b, dim_c, valueD, valueE, params, std::move(warp));
+	fractal_type = make_fractal_type(type, fractal_params.a, fractal_params.b, fractal_params.c,
+		fractal_params.d, fractal_params.e, params, std::move(warp));
 
-	if (case_hash(format) == "3df"_case && csize <= 0)
+	if (case_hash(format) == "3df"_case && fractal_params.c.size == 0)
 		throw std::invalid_argument("3df output requires a z dimension: use -f <frames>.");
 
 	if (!post_frame_cmd.empty())
