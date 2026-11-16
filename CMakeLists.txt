@@ -34,6 +34,7 @@ add_executable(lyapunov lyapunov.cc
         grid.cc
         file_writer.cc
         draw-rgb.cc
+        render.cc
         lissajous.cc
         string_case.hh
         fonts/fonts.cc)
