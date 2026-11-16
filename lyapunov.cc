@@ -7,6 +7,8 @@
 #include <cctype>
 #include <cmath>
 #include <cstring>
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <getopt.h>
 #include <utility>
@@ -18,6 +20,7 @@
 #include "rgb.hh"
 #include "draw.hh"
 #include "grid.hh"
+#include "file_writer.hh"
 
 #ifdef _WIN32
 #include <io.h>
@@ -208,32 +211,25 @@ void make_ppm(const unsigned frame_nr)
 	std::vector<RGB> img;
 	img.resize(fractal_params.a.size * fractal_params.b.size);
 
-	// PPM header
-	fprintf( of,"P6\n");
-	fflush(of);
 	lyapunov(img, fractal_params, *fractal_type, frame_nr);
 	if (grid)
 		draw_grid(img, fractal_params, *fractal_type, !warp_name.empty(), grid_options);
-	fprintf(of, "# Lyapunov: '%s' max_iter=%d  seq='%s'  a=%f ... %f  b=%f ... %f ",
-		fractal_type->name(),
-		fractal_params.max_iter, fractal_params.sequence.c_str(),
-		fractal_params.a.min, fractal_params.a.max, fractal_params.b.min, fractal_params.b.max);
 
-	if(setC) fprintf(of, " frame=%u/%u  C=%f ... %f", frame_nr, fractal_params.c.size, fractal_params.c.min, fractal_params.c.max);
-	if(setD) fprintf(of, " D=%f", fractal_params.d);
-	if(setE) fprintf(of, " E=%f", fractal_params.e);
-	if(setF) fprintf(of, " F=%f", valueF);
-	
-	fprintf(of, "\n"
-		"%d %d 255\n",
-		int(fractal_params.b.size), int(fractal_params.a.size)
-		);
-	
-	for (int ai = 0; ai < int(fractal_params.a.size); ++ai)
-	{
-		fwrite(&img[size_t(ai) * fractal_params.b.size], sizeof(RGB), fractal_params.b.size, of);
-	}
-	fflush(of);
+	// PPM comment with the generation parameters
+	std::ostringstream oss;
+	oss << std::fixed << std::setprecision(6);
+	oss << "# Lyapunov: '" << fractal_type->name() << "' max_iter=" << fractal_params.max_iter
+	    << "  seq='" << fractal_params.sequence << "'  a=" << fractal_params.a.min << " ... " << fractal_params.a.max
+	    << "  b=" << fractal_params.b.min << " ... " << fractal_params.b.max;
+	// the optional parts below start with a space; the base always ends with
+	// one (as in the original format string), so two spaces separate them
+	oss << " ";
+	if(setC) oss << " frame=" << frame_nr << "/" << fractal_params.c.size << "  C=" << fractal_params.c.min << " ... " << fractal_params.c.max;
+	if(setD) oss << " D=" << fractal_params.d;
+	if(setE) oss << " E=" << fractal_params.e;
+	if(setF) oss << " F=" << valueF;
+
+	write_ppm(of, img, fractal_params.b.size, fractal_params.a.size, oss.str());
 
 	if (!outfile.empty())
 	{
@@ -254,15 +250,6 @@ void make_ppm()
 	}
 }
 
-inline
-uint8_t get(const std::vector<std::vector<uint8_t>>& img, const int x, const int y, const int z)
-{
-	if( unsigned(y) >= fractal_params.a.size ) return 0;
-	if( unsigned(x) >= fractal_params.b.size ) return 0;
-	return img[z][size_t(y) * fractal_params.b.size + x];
-}
-
-
 void make_3df()
 {
 	if (!outfile.empty())
@@ -277,11 +264,7 @@ void make_3df()
 		}
 	}
 	// 3df header
-	fprintf(of, "%c%c%c%c%c%c",
-		fractal_params.b.size >> 8, fractal_params.b.size & 255,
-		fractal_params.a.size >> 8, fractal_params.a.size & 255,
-		fractal_params.c.size >> 8, fractal_params.c.size & 255
-	);
+	write_3df_header(of, fractal_params.b.size, fractal_params.a.size, fractal_params.c.size);
 	fflush(of);
 	
 	// 3 images:
@@ -295,19 +278,7 @@ void make_3df()
 		lyapunov(img[2], fractal_params, *fractal_type, ci);
 		
 		fprintf(stderr,"\tblurring...\n");
-		for(int y=0; y<int(fractal_params.a.size); ++y)
-		for(int x=0; x<int(fractal_params.b.size); ++x)
-		{
-			unsigned u = 0;
-			for(int z=0; z<3; ++z)
-			for(int dy=-1; dy<=+1; ++dy)
-			for(int dx=-1; dx<=+1; ++dx)
-			{
-				u += get(img, x+dx, y+dy, z);
-			}
-			const uint8_t u8 = u/27;
-			fputc(u8, of);
-		}
+		write_3df_frame(of, img, fractal_params.b.size, fractal_params.a.size);
 		fflush(of);
 		img[0].swap(img[1]);
 		img[1].swap(img[2]);

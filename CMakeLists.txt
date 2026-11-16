@@ -31,6 +31,8 @@ endif()
 add_executable(lyapunov lyapunov.cc
         fractal_params.cc
         fractal_type.cc
+        grid.cc
+        file_writer.cc
         draw-rgb.cc
         lissajous.cc
         string_case.hh

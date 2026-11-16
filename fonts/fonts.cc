@@ -11,3 +11,14 @@ const std::map<std::string, const Font*> fonts = {
 	{"24", &ter_24},
 	{"32", &ter_32},
 };
+
+std::string font_names()
+{
+	std::string list;
+	for (const auto& f : fonts)
+	{
+		if (!list.empty()) list += ", ";
+		list += f.first;
+	}
+	return list;
+}

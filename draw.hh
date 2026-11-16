@@ -15,8 +15,11 @@ struct Font
 	const uint16_t* data; // contains only data for character codes 0x20 ... 0x7F.  'height' entries per character cell
 };
 
-// defined in fonts/font.cc
+// defined in fonts/fonts.cc
 extern const std::map<std::string, const Font*> fonts;
+
+// all font names, comma-separated (defined in fonts/fonts.cc)
+std::string font_names();
 
 // public interface: draw into a row-major pixel buffer of size_t(width) * height
 // pixels, x = column (to the right), y = row (downwards)
