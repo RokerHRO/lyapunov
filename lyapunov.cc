@@ -266,7 +266,12 @@ std::string grid_label(const double value, const int decimals)
 struct GridField
 {
 	double c0, gx, gy;
+
 	double value_at(const double px, const double py) const { return c0 + gx*px + gy*py; }
+
+	// the field's minimum and maximum over the window: a linear function
+	// over a rectangle achieves its extrema at a corner, so the four
+	// corners are evaluated
 	std::pair<double, double> range(const double pxlo, const double pxhi, const double pylo, const double pyhi) const
 	{
 		double lo = value_at(pxlo, pylo), hi = lo;
@@ -319,7 +324,7 @@ bool grid_line_endpoints(const GridField& field, const double value,
 }
 
 // where to place the label: at the end of the line at the left/bottom/top edge
-enum GridLabelEnd { LabelLeft, LabelBottom, LabelTop };
+enum GridLabelPosition { LabelLeft, LabelBottom, LabelTop };
 
 // the parameter axis the tileable grid lines belong to (a: sine over the
 // lines, horizontal; b: cosine over the columns, vertical)
@@ -329,7 +334,7 @@ enum GridAxis { AxisA, AxisB };
 // left/bottom/top end of the line
 void draw_grid_line_labeled(std::vector<RGB>& img, const int W, const int H,
 		const double x0, const double y0, const double x1, const double y1,
-		const std::string* text, const GridLabelEnd label_end, const RGB& fg)
+		const std::string* text, const GridLabelPosition label_position, const RGB& fg)
 {
 	draw_line(img, W, H, int(x0), int(y0), int(x1), int(y1), fg);
 	if (!text)
@@ -337,13 +342,13 @@ void draw_grid_line_labeled(std::vector<RGB>& img, const int W, const int H,
 	const int label_width = int(text->size()) * int(grid_font->width);
 	const int label_height = int(grid_font->height);
 	int lx, ly;
-	if (label_end == LabelLeft) // constant-a line: label near the left end
+	if (label_position == LabelLeft) // constant-a line: label near the left end
 	{
 		const bool left = x0 <= x1;
 		lx = int(left ? x0 : x1) + 2;
 		ly = int(left ? y0 : y1) - label_height / 2;
 	}
-	else if (label_end == LabelBottom) // constant-b line: label near the bottom end
+	else if (label_position == LabelBottom) // constant-b line: label near the bottom end
 	{
 		const bool bottom = y0 >= y1;
 		lx = int(bottom ? x0 : x1) - label_width / 2;
@@ -364,7 +369,7 @@ void draw_grid_line_labeled(std::vector<RGB>& img, const int W, const int H,
 // with labels; the lines are straight for all supported types
 void draw_grid_value_lines(std::vector<RGB>& img, const int W, const int H, const GridField& f,
 		const double lo, const double hi, const double step, const int decimals,
-		const GridLabelEnd label_end, const RGB& fg)
+		const GridLabelPosition label_position, const RGB& fg)
 {
 	const double pxlo = -0.5, pxhi = W - 0.5, pylo = -0.5, pyhi = H - 0.5;
 	const int n_first = int(ceil(lo / step - 1e-9));
@@ -374,7 +379,7 @@ void draw_grid_value_lines(std::vector<RGB>& img, const int W, const int H, cons
 	// neighboring labels do not overlap (measured along the edge the labels run on)
 	int label_stride = 1;
 	const int n_lines = n_last - n_first + 1;
-	if (label_end == LabelLeft) // a labels: stacked vertically, must fit their height
+	if (label_position == LabelLeft) // a labels: stacked vertically, must fit their height
 	{
 		const int label_height = int(grid_font->height);
 		label_stride = std::max(1, (label_height * n_lines + H - 1) / H);
@@ -395,7 +400,7 @@ void draw_grid_value_lines(std::vector<RGB>& img, const int W, const int H, cons
 			continue;
 		const std::string text = grid_label(value, decimals);
 		draw_grid_line_labeled(img, W, H, x0, y0, x1, y1,
-			(n - n_first) % label_stride ? nullptr : &text, label_end, fg);
+			(n - n_first) % label_stride ? nullptr : &text, label_position, fg);
 	}
 }
 
@@ -404,7 +409,7 @@ void draw_grid_value_lines(std::vector<RGB>& img, const int W, const int H, cons
 // up to two lines; the positions are solved from sin/cos = target
 void draw_grid_sinus_axis(std::vector<RGB>& img, const int W, const int H, const GridAxis axis,
 		const double center, const double radius, const double lo, const double hi,
-		const double step, const int decimals, const GridLabelEnd label_end, const RGB& fg)
+		const double step, const int decimals, const GridLabelPosition label_position, const RGB& fg)
 {
 	// the line positions run in pixel units along the varying axis (py for
 	// the a lines, px for the b lines); the pixel window is [-0.5, N-0.5]
@@ -418,7 +423,7 @@ void draw_grid_sinus_axis(std::vector<RGB>& img, const int W, const int H, const
 	// the line count
 	const int label_stride = [&] {
 		const int n_lines = 2 * (n_last - n_first + 1);
-		if (label_end == LabelLeft)
+		if (label_position == LabelLeft)
 		{
 			const int label_height = int(grid_font->height);
 			return std::max(1, (label_height * n_lines + H - 1) / H);
@@ -464,7 +469,7 @@ void draw_grid_sinus_axis(std::vector<RGB>& img, const int W, const int H, const
 				x0 = pos; y0 = -0.5; x1 = pos; y1 = H - 0.5;
 			}
 			draw_grid_line_labeled(img, W, H, x0, y0, x1, y1,
-				(n - n_first) % label_stride == 0 ? &text : nullptr, label_end, fg);
+				(n - n_first) % label_stride == 0 ? &text : nullptr, label_position, fg);
 		}
 	}
 }
