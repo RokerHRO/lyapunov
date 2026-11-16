@@ -28,30 +28,42 @@ if(WIN32 AND NOT MSVC)
     set(BUILD_SHARED_LIBS OFF)
 endif()
 
-add_executable(lyapunov lyapunov.cc
+# The library with the fractal computation, usable by the CLI and by GUI programs.
+add_library(lyapunovlib STATIC
         fractal_params.cc
         fractal_type.cc
         grid.cc
         file_writer.cc
-        draw-rgb.cc
         render.cc
-        lissajous.cc
-        string_case.hh
-        fonts/fonts.cc)
+        draw-rgb.cc
+        fonts/fonts.cc
+        fractal_params.hh
+        fractal_type.hh
+        grid.hh
+        file_writer.hh
+        render.hh
+        render.hxx
+        draw.hh
+        draw.hxx
+        rgb.hh
+        string_case.hh)
+
+add_executable(lyapunov lyapunov.cc)
+target_link_libraries(lyapunov PRIVATE lyapunovlib)
 
 if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(lyapunov PRIVATE -fopenmp)
+    target_compile_options(lyapunovlib PRIVATE -fopenmp)
     target_link_options(lyapunov PRIVATE -fopenmp)
 else()
-    target_link_libraries(lyapunov PRIVATE OpenMP::OpenMP_CXX)
+    target_link_libraries(lyapunovlib PUBLIC OpenMP::OpenMP_CXX)
 endif()
 
 add_executable(gen-ab-sequences gen-ab-sequences.cc)
 
 add_executable(gen_zoom gen_zoom.cc)
 
-add_executable(gen_poses gen_poses.cc
-        fractal_type.cc)
+add_executable(gen_poses gen_poses.cc)
+target_link_libraries(gen_poses PRIVATE lyapunovlib)
 
 add_executable(generate_font generate_font.cc)
 
