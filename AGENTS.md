@@ -42,7 +42,9 @@ Linux: g++/clang++).
   for functions, classes and control statements; left pointer alignment;
   140 columns). The repo is not fully clang-format-clean (the code mixes
   dense operator spacing `a*b` with spaced `a + b`, manually aligned
-  help-text/case blocks); keep new code consistent with the surroundings.
+   help-text/case blocks); keep new code consistent with the surroundings.
+- Casts in new code: function-style (`int(x)`, `double(y)`), never C-style
+  (`(int)x`); omit the cast when an implicit conversion suffices.
 - Small focused functions; comments only for non-obvious math (state the
   formula, not the trivial code).
 - Comments use C++ style (`//`); the repo still contains some legacy

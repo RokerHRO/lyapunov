@@ -266,13 +266,13 @@ std::string grid_label(const double value, const int decimals)
 struct GridField
 {
 	double c0, gx, gy;
-	double operator()(const double px, const double py) const { return c0 + gx*px + gy*py; }
+	double value_at(const double px, const double py) const { return c0 + gx*px + gy*py; }
 	std::pair<double, double> range(const double pxlo, const double pxhi, const double pylo, const double pyhi) const
 	{
-		double lo = (*this)(pxlo, pylo), hi = lo;
+		double lo = value_at(pxlo, pylo), hi = lo;
 		for (const auto& p : {std::pair{pxhi, pylo}, std::pair{pxlo, pyhi}, std::pair{pxhi, pyhi}})
 		{
-			const double v = (*this)(p.first, p.second);
+			const double v = value_at(p.first, p.second);
 			lo = std::min(lo, v);
 			hi = std::max(hi, v);
 		}
@@ -281,18 +281,18 @@ struct GridField
 };
 
 // intersect the line field(px, py) = value with the window rectangle
-bool grid_line_endpoints(const GridField& f, const double value,
+bool grid_line_endpoints(const GridField& field, const double value,
 		const double pxlo, const double pxhi, const double pylo, const double pyhi,
 		double& x0, double& y0, double& x1, double& y1)
 {
-	const double v = value - f.c0;
+	const double v = value - field.c0;
 	constexpr double EPS = 1e-12;
 	double pts[2][2];
 	int n = 0;
-	if (n < 2 && std::abs(f.gy) > EPS)
+	if (n < 2 && std::abs(field.gy) > EPS)
 		for (const double px : {pxlo, pxhi})
 		{
-			const double py = (v - f.gx*px) / f.gy;
+			const double py = (v - field.gx*px) / field.gy;
 			if (py >= pylo && py <= pyhi)
 			{
 				pts[n][0] = px;
@@ -300,10 +300,10 @@ bool grid_line_endpoints(const GridField& f, const double value,
 				++n;
 			}
 		}
-	if (n < 2 && std::abs(f.gx) > EPS)
+	if (n < 2 && std::abs(field.gx) > EPS)
 		for (const double py : {pylo, pyhi})
 		{
-			const double px = (v - f.gy*py) / f.gx;
+			const double px = (v - field.gy*py) / field.gx;
 			if (px >= pxlo && px <= pxhi)
 			{
 				pts[n][0] = px;
@@ -321,6 +321,45 @@ bool grid_line_endpoints(const GridField& f, const double value,
 // where to place the label: at the end of the line at the left/bottom/top edge
 enum GridLabelEnd { LabelLeft, LabelBottom, LabelTop };
 
+// the parameter axis the tileable grid lines belong to (a: sine over the
+// lines, horizontal; b: cosine over the columns, vertical)
+enum GridAxis { AxisA, AxisB };
+
+// draw one grid line; if text is non-null, also draw its label at the
+// left/bottom/top end of the line
+void draw_grid_line_labeled(std::vector<RGB>& img, const int W, const int H,
+		const double x0, const double y0, const double x1, const double y1,
+		const std::string* text, const GridLabelEnd label_end, const RGB& fg)
+{
+	draw_line(img, W, H, int(x0), int(y0), int(x1), int(y1), fg);
+	if (!text)
+		return;
+	const int label_width = int(text->size()) * int(grid_font->width);
+	const int label_height = int(grid_font->height);
+	int lx, ly;
+	if (label_end == LabelLeft) // constant-a line: label near the left end
+	{
+		const bool left = x0 <= x1;
+		lx = int(left ? x0 : x1) + 2;
+		ly = int(left ? y0 : y1) - label_height / 2;
+	}
+	else if (label_end == LabelBottom) // constant-b line: label near the bottom end
+	{
+		const bool bottom = y0 >= y1;
+		lx = int(bottom ? x0 : x1) - label_width / 2;
+		ly = int(bottom ? y0 : y1) - label_height - 2;
+	}
+	else // constant-c line: label near the top end
+	{
+		const bool top = y0 <= y1;
+		lx = int(top ? x0 : x1) + 2;
+		ly = int(top ? y0 : y1) + 1;
+	}
+	lx = std::clamp(lx, 1, W - label_width - 1);
+	ly = std::clamp(ly, 1, H - label_height - 1);
+	draw_shaded_text(img, W, H, lx, ly, *text, fg, grid_bg, *grid_font);
+}
+
 // draw coordinate lines at "nice" values of the given parameter (a, b or c),
 // with labels; the lines are straight for all supported types
 void draw_grid_value_lines(std::vector<RGB>& img, const int W, const int H, const GridField& f,
@@ -328,73 +367,120 @@ void draw_grid_value_lines(std::vector<RGB>& img, const int W, const int H, cons
 		const GridLabelEnd label_end, const RGB& fg)
 {
 	const double pxlo = -0.5, pxhi = W - 0.5, pylo = -0.5, pyhi = H - 0.5;
-	const int n0 = int(ceil(lo / step - 1e-9));
-	const int n1 = int(floor(hi / step + 1e-9));
+	const int n_first = int(ceil(lo / step - 1e-9));
+	const int n_last = int(floor(hi / step + 1e-9));
 
-	// label every k-th line: k is the smallest number for which neighboring
-	// labels do not overlap (measured along the edge the labels run on)
-	int k = 1;
-	const int n_lines = n1 - n0 + 1;
+	// label every label_stride-th line: the smallest number for which
+	// neighboring labels do not overlap (measured along the edge the labels run on)
+	int label_stride = 1;
+	const int n_lines = n_last - n_first + 1;
 	if (label_end == LabelLeft) // a labels: stacked vertically, must fit their height
 	{
-		const int th = int(grid_font->height);
-		k = std::max(1, (th * n_lines + H - 1) / H);
+		const int label_height = int(grid_font->height);
+		label_stride = std::max(1, (label_height * n_lines + H - 1) / H);
 	}
 	else // b/c labels: run horizontally along the bottom/top edge
 	{
-		const std::string t0 = grid_label(n0 * step, decimals);
-		const std::string t1 = grid_label(n1 * step, decimals);
-		const int tw = int(std::max(t0.size(), t1.size())) * int(grid_font->width);
-		k = std::max(1, (tw * n_lines + W - 1) / W);
+		const std::string first_label = grid_label(n_first * step, decimals);
+		const std::string last_label = grid_label(n_last * step, decimals);
+		const int label_width = int(std::max(first_label.size(), last_label.size())) * int(grid_font->width);
+		label_stride = std::max(1, (label_width * n_lines + W - 1) / W);
 	}
 
-	for (int n = n0; n <= n1; ++n)
+	for (int n = n_first; n <= n_last; ++n)
 	{
 		const double value = n * step;
 		double x0, y0, x1, y1;
 		if (!grid_line_endpoints(f, value, pxlo, pxhi, pylo, pyhi, x0, y0, x1, y1))
 			continue;
-		draw_line(img, W, H, int(x0), int(y0), int(x1), int(y1), fg);
-		if ((n - n0) % k)
-			continue;
-
 		const std::string text = grid_label(value, decimals);
-		const int tw = int(text.size()) * int(grid_font->width);
-		const int th = int(grid_font->height);
-		int lx, ly;
-		if (label_end == LabelLeft) // constant-a line: label near the left end
+		draw_grid_line_labeled(img, W, H, x0, y0, x1, y1,
+			(n - n_first) % label_stride ? nullptr : &text, label_end, fg);
+	}
+}
+
+// tileable / tileable-loop: the window is one full period of a sine (a along
+// the lines) and a cosine (b along the columns), so a given value occurs on
+// up to two lines; the positions are solved from sin/cos = target
+void draw_grid_sinus_axis(std::vector<RGB>& img, const int W, const int H, const GridAxis axis,
+		const double center, const double radius, const double lo, const double hi,
+		const double step, const int decimals, const GridLabelEnd label_end, const RGB& fg)
+{
+	// the line positions run in pixel units along the varying axis (py for
+	// the a lines, px for the b lines); the pixel window is [-0.5, N-0.5]
+	const double pos_lo = -0.5, pos_hi = (axis == AxisA ? H : W) - 0.5;
+	// first/last line index: the grid values are n * step for n_first..n_last
+	const int n_first = int(ceil(lo / step - 1e-9));
+	const int n_last = int(floor(hi / step + 1e-9));
+
+	// label every label_stride-th value so that neighboring labels do not
+	// overlap along the labeled edge; a value can have two lines, so double
+	// the line count
+	const int label_stride = [&] {
+		const int n_lines = 2 * (n_last - n_first + 1);
+		if (label_end == LabelLeft)
 		{
-			const bool left = x0 <= x1;
-			lx = int(left ? x0 : x1) + 2;
-			ly = int(left ? y0 : y1) - th / 2;
+			const int label_height = int(grid_font->height);
+			return std::max(1, (label_height * n_lines + H - 1) / H);
 		}
-		else if (label_end == LabelBottom) // constant-b line: label near the bottom end
+		const std::string first_label = grid_label(n_first * step, decimals);
+		const std::string last_label = grid_label(n_last * step, decimals);
+		const int label_width = int(std::max(first_label.size(), last_label.size())) * int(grid_font->width);
+		return std::max(1, (label_width * n_lines + W - 1) / W);
+	}();
+
+	for (int n = n_first; n <= n_last; ++n)
+	{
+		const double value = n * step;
+		// the sine/cosine value the window function must take for this line
+		const double target = (value - center) / radius;
+		if (target < -1.0 - 1e-9 || target > 1.0 + 1e-9)
+			continue;
+		const double target_clamped = std::clamp(target, -1.0, 1.0);
+		// the two angle solutions of sin(angle) = target / cos(angle) = target
+		// in one period; the first is wrapped by 2*pi if it falls below the
+		// window start
+		const double scale = axis == AxisA ? H : W;
+		double angles[2] = { axis == AxisA ? asin(target_clamped) : acos(target_clamped), axis == AxisA ? M_PI - asin(target_clamped) : 2*M_PI - acos(target_clamped) };
+		if (angles[0] * scale / (2*M_PI) < pos_lo)
+			angles[0] += 2*M_PI;
+		if (angles[0] > angles[1])
+			std::swap(angles[0], angles[1]);
+		const std::string text = grid_label(value, decimals);
+		double last = -1e30;
+		for (const double angle : angles)
 		{
-			const bool bottom = y0 >= y1;
-			lx = int(bottom ? x0 : x1) - tw / 2;
-			ly = int(bottom ? y0 : y1) - th - 2;
+			const double pos = angle * scale / (2*M_PI);
+			if (pos < pos_lo || pos > pos_hi || pos - last < 1e-9) // the solutions coincide at s = +/-1
+				continue;
+			last = pos;
+			double x0, y0, x1, y1;
+			if (axis == AxisA) // horizontal line
+			{
+				x0 = -0.5; y0 = pos; x1 = W - 0.5; y1 = pos;
+			}
+			else // vertical line
+			{
+				x0 = pos; y0 = -0.5; x1 = pos; y1 = H - 0.5;
+			}
+			draw_grid_line_labeled(img, W, H, x0, y0, x1, y1,
+				(n - n_first) % label_stride == 0 ? &text : nullptr, label_end, fg);
 		}
-		else // constant-c line: label near the top end
-		{
-			const bool top = y0 <= y1;
-			lx = int(top ? x0 : x1) + 2;
-			ly = int(top ? y0 : y1) + 1;
-		}
-		lx = std::clamp(lx, 1, W - tw - 1);
-		ly = std::clamp(ly, 1, H - th - 1);
-		draw_shaded_text(img, W, H, lx, ly, text, fg, grid_bg, *grid_font);
 	}
 }
 
 void draw_grid(std::vector<RGB>& img)
 {
-	// the grid is only supported for types with an affine (straight-line)
-	// mapping from the pixel position to the (a, b, c) parameter space
+	// the grid is only supported for types with a straight-line mapping from
+	// the pixel position to the (a, b, c) parameter space: affine for
+	// plain/circle/zoom/flights, one sine/cosine period per axis for tileable
 	switch (case_hash(fractal_type->name()))
 	{
 		case "plain"_case:  [[fallthrough]];
 		case "circle"_case: [[fallthrough]];
 		case "zoom"_case:   [[fallthrough]];
+		case "tileable"_case: [[fallthrough]];
+		case "tileable-loop"_case: [[fallthrough]];
 		case "six_side"_case: [[fallthrough]];
 		case "wander"_case: [[fallthrough]];
 		case "rotor"_case:  break;
@@ -408,12 +494,14 @@ void draw_grid(std::vector<RGB>& img)
 	const int W = bsize, H = asize;
 	const double pxlo = -0.5, pxhi = W - 0.5, pylo = -0.5, pyhi = H - 0.5;
 
-	bool flight = false;
+	bool flight = false, tileable = false;
 	switch (case_hash(fractal_type->name()))
 	{
 		case "six_side"_case: [[fallthrough]];
 		case "wander"_case:   [[fallthrough]];
 		case "rotor"_case:    flight = true; break;
+		case "tileable"_case: [[fallthrough]];
+		case "tileable-loop"_case: tileable = true; break;
 		default: break;
 	}
 
@@ -463,12 +551,21 @@ void draw_grid(std::vector<RGB>& img)
 		abc_at(0, 1, v2[0], v2[1], v2[2]);
 		return {v0[which], v1[which] - v0[which], v2[which] - v0[which]};
 	};
-	const GridField fa = make_field(0);
-	const GridField fb = make_field(1);
+	const GridField fa = tileable ? GridField{} : make_field(0);
+	const GridField fb = tileable ? GridField{} : make_field(1);
 	const GridField fc = flight ? make_field(2) : GridField{};
 
-	const auto ra = fa.range(pxlo, pxhi, pylo, pyhi);
-	const auto rb = fb.range(pxlo, pxhi, pylo, pyhi);
+	std::pair<double, double> ra, rb;
+	if (tileable) // one full period: the window covers the whole a/b range
+	{
+		ra = { std::min(amin, amax), std::max(amin, amax) };
+		rb = { std::min(bmin, bmax), std::max(bmin, bmax) };
+	}
+	else
+	{
+		ra = fa.range(pxlo, pxhi, pylo, pyhi);
+		rb = fb.range(pxlo, pxhi, pylo, pyhi);
+	}
 	const auto rc = fc.range(pxlo, pxhi, pylo, pyhi);
 
 	// target number of lines on the larger axis (grid_size)
@@ -484,8 +581,16 @@ void draw_grid(std::vector<RGB>& img)
 
 	if (flight)
 		draw_grid_value_lines(img, W, H, fc, rc.first, rc.second, step, decimals, LabelTop, fg_c);
-	draw_grid_value_lines(img, W, H, fb, rb.first, rb.second, step, decimals, LabelBottom, fg_b);
-	draw_grid_value_lines(img, W, H, fa, ra.first, ra.second, step, decimals, LabelLeft, grid_fg);
+	if (tileable)
+	{
+		draw_grid_sinus_axis(img, W, H, AxisB, (bmin + bmax) / 2, (bmax - bmin) / 2, rb.first, rb.second, step, decimals, LabelBottom, fg_b);
+		draw_grid_sinus_axis(img, W, H, AxisA, (amin + amax) / 2, (amax - amin) / 2, ra.first, ra.second, step, decimals, LabelLeft, grid_fg);
+	}
+	else
+	{
+		draw_grid_value_lines(img, W, H, fb, rb.first, rb.second, step, decimals, LabelBottom, fg_b);
+		draw_grid_value_lines(img, W, H, fa, ra.first, ra.second, step, decimals, LabelLeft, grid_fg);
+	}
 }
 
 void make_ppm(const unsigned frame_nr)
@@ -750,7 +855,8 @@ void print_help(FILE* f)
 		"\t-P params[,...], --warp-params : comma-separated list of numerical parameters for -w\n"
 		"\t-A, --animate-warp : animate the warp over the frames (see -t help)\n"
 		"\t--grid[=font,size,fg,bg] : draw and label coordinate lines on the rendered PPM frames\n"
-		"\t                           (font: %s; grid size dense, medium or sparse, default medium;\n"
+		"\t                           (supported: plain, circle, zoom, tileable, tileable-loop, and the flight types\n"
+		"\t                           6sides, wander, rotor; font: %s; grid size dense, medium or sparse, default medium;\n"
 		"\t                           fg/bg #RRGGBB, default #FFFFFF/#000000; trailing parameters may be omitted).\n"
 		"\t                           Colors: a = fg, b = fg with the red channel halved (#7fffff for white);\n"
 		"\t                           for the flight types also c lines are drawn, using fg with the green\n"
