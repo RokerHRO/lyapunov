@@ -330,6 +330,24 @@ void draw_grid_value_lines(std::vector<RGB>& img, const int W, const int H, cons
 	const double pxlo = -0.5, pxhi = W - 0.5, pylo = -0.5, pyhi = H - 0.5;
 	const int n0 = int(ceil(lo / step - 1e-9));
 	const int n1 = int(floor(hi / step + 1e-9));
+
+	// label every k-th line: k is the smallest number for which neighboring
+	// labels do not overlap (measured along the edge the labels run on)
+	int k = 1;
+	const int n_lines = n1 - n0 + 1;
+	if (label_end == LabelLeft) // a labels: stacked vertically, must fit their height
+	{
+		const int th = int(grid_font->height);
+		k = std::max(1, (th * n_lines + H - 1) / H);
+	}
+	else // b/c labels: run horizontally along the bottom/top edge
+	{
+		const std::string t0 = grid_label(n0 * step, decimals);
+		const std::string t1 = grid_label(n1 * step, decimals);
+		const int tw = int(std::max(t0.size(), t1.size())) * int(grid_font->width);
+		k = std::max(1, (tw * n_lines + W - 1) / W);
+	}
+
 	for (int n = n0; n <= n1; ++n)
 	{
 		const double value = n * step;
@@ -337,6 +355,8 @@ void draw_grid_value_lines(std::vector<RGB>& img, const int W, const int H, cons
 		if (!grid_line_endpoints(f, value, pxlo, pxhi, pylo, pyhi, x0, y0, x1, y1))
 			continue;
 		draw_line(img, W, H, int(x0), int(y0), int(x1), int(y1), fg);
+		if ((n - n0) % k)
+			continue;
 
 		const std::string text = grid_label(value, decimals);
 		const int tw = int(text.size()) * int(grid_font->width);
@@ -452,7 +472,7 @@ void draw_grid(std::vector<RGB>& img)
 	const auto rc = fc.range(pxlo, pxhi, pylo, pyhi);
 
 	// target number of lines on the larger axis (grid_size)
-	const int target = grid_size == GridDense ? 50 : grid_size == GridSparse ? 10 : 20;
+	const int target = grid_size == GridDense ? 40 : grid_size == GridSparse ? 8 : 12;
 	const double span = std::max(ra.second - ra.first, rb.second - rb.first);
 	const double step = grid_step(span / target);
 	const int decimals = std::max(0, int(ceil(-log10(step) - 1e-9)));
