@@ -27,9 +27,6 @@
 #include <fcntl.h>
 #endif
 
-//int seq_length = 12;
-//int seq[12] = {1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0};
-
 std::string center;
 std::string type = "plain";
 std::string format = "pnm";
@@ -61,7 +58,6 @@ GridOptions grid_options; // set in main() from grid_spec
 
 FILE* of = nullptr;
 std::unique_ptr<FractalType> fractal_type;
-
 
 
 void run_post_frame_cmd(const std::string& out_name, const unsigned frame_nr)
@@ -181,6 +177,7 @@ void make_3df()
 		fclose(of);
 	}
 }
+
 
 void print_type_help(FILE* f)
 {
@@ -323,8 +320,6 @@ std::vector<double> parse_params(const char* p)
 	}
 	return params;
 }
-
-
 
 
 // long-only options (no short form): values >= 256 can never collide with a short option
@@ -527,6 +522,7 @@ int main(int argc, char** argv) try
 		case "help"_case   : [[fallthrough]];
 		case "-h"_case     : [[fallthrough]];
 		case "--help"_case : print_type_help(stdout); return 0;
+		default            : break;
 	}
 
 	if (!warp_name.empty())

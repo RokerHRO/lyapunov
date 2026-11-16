@@ -26,11 +26,29 @@ Linux: g++/clang++).
 - Older MinGW libstdc++ versions lack P0408 operators
   (`string + string_view`, `const char* + string_view`): build such
   strings with explicit `std::string(...)` conversions.
+- The shared modules are built as the static library `lyapunovlib`;
+  `lyapunov` and `gen_poses` link it. OpenMP is a compile flag on the
+  library and a link flag on the executables (Windows/MinGW branch);
+  the library is installed with its public headers
+  (`install()` in CMakeLists.txt).
 
 ## Code layout and conventions
 
-- `fractal_type.hh/.cc` – all fractal types; `lyapunov.cc` – CLI driver;
-  helpers go in the anonymous namespace of `fractal_type.cc`.
+- The fractal computation lives in the static library `lyapunovlib`;
+  shared code goes into the library, **not** into `lyapunov.cc`.
+  `lyapunov.cc` is the CLI driver only (getopt, help text, file streams,
+  the post-frame command). Future GUI programs link `lyapunovlib` too.
+- One topic per module: `fractal_params.hh/.cc` (the FractalParams struct:
+  dimensions, max_iter, sequence, d/e, color-map range, filename
+  patterns), `fractal_type.hh/.cc` (all fractal types; helpers in the
+  anonymous namespace of `fractal_type.cc`), `grid.hh/.cc` (the --grid
+  overlay), `file_writer.hh/.cc` (PPM/3df writers), `fonts/fonts.cc`
+  (built-in font data).
+- Non-trivial template code is not inlined into headers: declarations in
+  `*.hh`, definitions in `*.hxx`, explicit instantiations for the pixel
+  types (RGB, uint8_t) in the matching `*.cc` (`render.cc`,
+  `draw-rgb.cc`); `render.hh/.hxx` renders one frame, `draw.hh/.hxx`
+  holds the drawing primitives.
 - `SimpleFractalType` subclasses override the inline `per_line`/`per_pixel`
   hooks; window-moving types are `FlightPath` subclasses used via `Flight`
   (a static base plus the path).

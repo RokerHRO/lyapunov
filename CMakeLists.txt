@@ -71,3 +71,10 @@ add_executable(lissa_overview lissajous.cc lissa_overview.cc)
 
 install(TARGETS lyapunov gen_zoom gen-ab-sequences gen_poses generate_font lissa_overview
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# The library for external consumers (e.g. GUI programs): static archive
+# plus the public headers (the *.hxx template definitions are internal).
+install(TARGETS lyapunovlib ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(FILES fractal_params.hh fractal_type.hh grid.hh file_writer.hh
+        render.hh draw.hh rgb.hh
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/lyapunov)
