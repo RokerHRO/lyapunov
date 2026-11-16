@@ -29,6 +29,7 @@ if(WIN32 AND NOT MSVC)
 endif()
 
 add_executable(lyapunov lyapunov.cc
+        fractal_params.cc
         fractal_type.cc
         draw-rgb.cc
         lissajous.cc

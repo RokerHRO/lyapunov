@@ -45,7 +45,7 @@ bool setF = false;
 // all parameters of the fractal computation (documented and defaulted in
 // fractal_params.hh)
 FractalParams fractal_params;
-int gstart = 0; // first frame to render (0-based, of the c.size frames)
+int gstart = 0; // first frame to render (0-based, of the total frame count)
 int gend = 0;   // one past the last frame to render (0: render all frames)
 
 std::vector<double> params;
@@ -67,48 +67,10 @@ RGB grid_fg{ 0xFF, 0xFF, 0xFF };
 RGB grid_bg{ 0x00, 0x00, 0x00 };
 
 
-std::string replace_all(std::string orig, std::string_view search, std::string_view replacement)
-{
-	std::string::size_type pos = orig.find(search);
-	while (pos < orig.size())
-	{
-		orig.replace(pos, search.length(), replacement);
-		pos = orig.find(search, pos + replacement.length());
-	}
-
-	return orig;
-}
-
-
-// no animation (c.size==0): {f} expands to the empty string, otherwise
-// zero-padded to the width of the last frame number
-std::string frame_nr_to_string(const unsigned frame_nr)
-{
-	if (fractal_params.c.size == 0)
-		return {};
-	char buf[16] = {};
-	const unsigned digits = snprintf(nullptr, 0, "%u", fractal_params.c.size-1);
-	snprintf(buf, sizeof(buf), "%0*u", digits, frame_nr);
-	return buf;
-}
-
-std::string expand_patterns(std::string tmpl, const unsigned frame_nr)
-{
-	tmpl = replace_all(tmpl, "{s}", fractal_params.sequence);
-	tmpl = replace_all(tmpl, "{i}", std::to_string(fractal_params.max_iter));
-	tmpl = replace_all(tmpl, "{f}", frame_nr_to_string(frame_nr));
-	return tmpl;
-}
-
-std::string decorate_filename(std::string filename, const unsigned frame_nr)
-{
-	return expand_patterns(std::move(filename), frame_nr);
-}
-
 void run_post_frame_cmd(const std::string& out_name, const unsigned frame_nr)
 {
 	// {o} is substituted last: the file name itself is already fully expanded
-	const std::string cmd = replace_all(expand_patterns(post_frame_cmd, frame_nr), "{o}", out_name);
+	const std::string cmd = replace_all(fractal_params.expand_patterns(post_frame_cmd, frame_nr), "{o}", out_name);
 	fprintf(stderr, "=== Post frame command: %s ===\n", cmd.c_str());
 	const int rc = std::system(cmd.c_str());
 	if (rc != 0)
@@ -582,7 +544,7 @@ void make_ppm(const unsigned frame_nr)
 	std::string outfile_ppm;
 	if (!outfile.empty())
 	{
-		outfile_ppm = decorate_filename(outfile, frame_nr);
+		outfile_ppm = fractal_params.expand_patterns(outfile, frame_nr);
 		if (outfile_ppm.empty() || outfile_ppm.back() == '/' || outfile_ppm.back() == '\\')
 			throw std::runtime_error("the output filename is empty after replacing the template patterns");
 		if (!outfile_ppm.ends_with(".ppm"))

@@ -1,7 +1,23 @@
 #ifndef STRING_CASE_HH
 #define STRING_CASE_HH
 
+#include <string>
 #include <string_view>
+
+// replace all occurrences of search with replacement
+inline
+std::string replace_all(std::string orig, const std::string_view search, const std::string_view replacement)
+{
+	std::string::size_type pos = orig.find(search);
+	while (pos < orig.size())
+	{
+		orig.replace(pos, search.length(), replacement);
+		pos = orig.find(search, pos + replacement.length());
+	}
+
+	return orig;
+}
+
 
 constexpr
 unsigned long long case_hash(const char* const s, const size_t len)

@@ -31,6 +31,15 @@ struct FractalParams
 	// match Wickerprint's original colors
 	double lambda_min = -2.55;
 	double lambda_max = 0.3959;
+
+	// the frame number as used in output file names: without animation
+	// (c.size == 0) the empty string, otherwise zero-padded to the width
+	// of the last frame number
+	std::string frame_nr_to_string(const unsigned frame_nr) const;
+
+	// replace the patterns in tmpl: {s}: sequence, {i}: iteration count,
+	// {f}: frame number
+	std::string expand_patterns(const std::string tmpl, const unsigned frame_nr) const;
 };
 
 #endif
